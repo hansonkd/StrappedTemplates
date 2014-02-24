@@ -12,15 +12,23 @@ type Output = Builder
 data Piece = StaticPiece Output
            | BlockPiece String [Piece]
            | ForPiece String String [Piece]
-           | VarPiece String
            | FuncPiece String [String]
-
+           | Decl String String [String]
+           | Include String
+           | Extends String
+           
+instance Show Piece where
+  show (StaticPiece a) = "StaticPiece " ++ (show $ toByteString a)
+  show (Decl n f args) = "Decl " ++ n ++ " " ++ f ++ " " ++ (show args)
+  show (Extends e) = "Extends " ++ e
+  show _ = "eh"
+  
 data Input m = 
              Value Output 
            | List [Input m]
            | Func  ([Input m] -> ErrorT StrapError m Output)  
 
-data StrapError = StrapError String | InputNotFound String
+data StrapError = StrapError String | InputNotFound String | TemplateNotFound String
   deriving (Show)
   
 instance Error StrapError where
@@ -29,4 +37,7 @@ instance Error StrapError where
 
 type InputGetter m = String -> Maybe (Input m)
 
-data Template = Template [Piece] [Piece]
+type TemplateStore = String -> IO (Maybe Template)
+
+data Template = Template [Piece] [(String, [Piece])]
+  deriving (Show)

@@ -11,32 +11,64 @@ import Strapped.Types
 combineGetter :: InputGetter m -> InputGetter m -> InputGetter m
 combineGetter g1 g2 i = maybe (g2 i) Just (g1 i) 
 
-render :: MonadIO m => InputGetter m -> Template -> m (Either StrapError Output)
-render getter' (Template c blocks) = runErrorT $ loop mempty getter' c
-  where loop accum getter [] = return accum
-        loop accum getter ((StaticPiece s):ps) = loop (accum <> s) getter ps
-        loop accum getter ((VarPiece varName):ps) = maybe (throwError $ InputNotFound varName) 
-                                                    (\var -> do { v <- renderVar varName var; loop (accum <> v) getter ps}) (getter varName)
-        loop accum getter ((BlockPiece n def):ps) = (maybe (loop accum getter def) (\content -> loop accum getter content) (getBlock n)) >>= (\a -> loop a getter ps)
-        loop accum getter ((ForPiece n l c):ps) = maybe (throwError $ InputNotFound n) ((\l -> (processFor getter n c accum l) >>= (\a -> loop a getter ps))) (getter l)
-        loop accum getter ((FuncPiece n args):ps) = case (getter n) of
-                                                Just (Func f) -> (forM args (\arg -> maybe (throwError $ InputNotFound arg) return (getter arg))) >>= 
-                                                                      (\inputs -> (f inputs) >>= (\s -> loop (accum <> s) getter ps))
-                                                                      
-                                                Just _ -> throwError $ StrapError $ n ++ " is not a function."
-                                                Nothing -> throwError $ InputNotFound n
+varGetter :: String -> Input m -> InputGetter m
+varGetter varName o v | v == varName = Just o
+                      | otherwise    = Nothing
+
+render :: MonadIO m => TemplateStore -> InputGetter m -> String -> m (Either StrapError Output)
+render tmplStore getter' tmplName = do
+      tmpl <- liftIO $ tmplStore tmplName
+      maybe (return $ Left $ TemplateNotFound tmplName) 
+            (\(Template c blks) -> runErrorT $ loop mempty blks getter' c) 
+            tmpl
+  where loop accum _ _ [] = return accum
+        loop accum blks getter ((StaticPiece s):ps) = loop (accum <> s) blks getter ps
+        loop accum blks getter ((BlockPiece n def):ps) = 
+          (maybe (loop accum blks getter def) 
+                 (\content -> loop accum blks getter content)
+                  (lookup n blks)
+          ) >>= (\a -> loop a blks getter ps)
+        loop accum blks getter ((ForPiece n l c):ps) = 
+          maybe (throwError $ InputNotFound n) 
+          (\l -> (processFor getter n c accum blks l) >>= 
+                 (\a -> loop a blks getter ps))
+          (getter l)
+        loop accum blks getter ((Extends n):ps) =
+            liftIO (tmplStore n) >>=
+            maybe (throwError $ TemplateNotFound n) 
+                  (\(Template c b) -> (loop accum (blks ++ b) getter c) >>= 
+                                      (\a -> loop a blks getter ps))
+        loop accum blks getter ((Include n):ps) =
+            liftIO (tmplStore n) >>=
+            maybe (throwError $ TemplateNotFound n) 
+                  (\(Template c _) -> (loop accum blks getter  c) >>= 
+                                      (\a -> loop a blks getter ps))
+        loop accum blks getter ((Decl n fn arg):ps) = 
+          (loop mempty blks getter [FuncPiece fn arg]) >>= 
+          (\r -> loop accum blks (combineGetter (varGetter n (Value r)) getter) ps)
+        -- 0 arity functions could be a value or a monadic function.
+        loop accum blks getter ((FuncPiece n []):ps) = 
+          case (getter n) of
+              Just (Func f) -> (f []) >>= 
+                               (\s -> loop (accum <> s) blks getter ps)
+              Just (Value v) -> loop (accum <> v) blks getter ps
+              Nothing -> throwError $ InputNotFound n
+        loop accum blks getter ((FuncPiece n args):ps) = 
+          case (getter n) of
+              Just (Func f) ->  (parseArgs args getter) >>= 
+                                (\inputs -> (f inputs) >>= 
+                                            (\s -> loop (accum <> s) blks getter ps)
+                                )
+              Just _ -> throwError $ StrapError $ n ++ " is not a function."
+              Nothing -> throwError $ InputNotFound n
         getBlock _ = Nothing
         
-        renderVar _ (Value v) = return $ v
-        renderVar varName _ = throwError $ StrapError $ varName ++ " is not renderable."
+        parseArgs args getter = (forM args (\arg -> maybe (throwError $ InputNotFound arg) return (getter arg)))
         
-        processFor getter varName content accum (List objs) = loopFor accum objs
-          where getVarName o v | v == varName = Just o
-                               | otherwise    = Nothing
-                loopGetter o = combineGetter (getVarName o) getter
-                
+        processFor getter varName content accum blks (List objs) = loopFor accum objs
+          where loopGetter o = combineGetter (varGetter varName o) getter
                 loopFor accum [] = return accum
                 loopFor accum (o:os) = do
-                      s <- loop accum (loopGetter o) content
+                      s <- loop accum blks (loopGetter o) content
                       loopFor s os
-        processFor _ varName _ _ _ = throwError $ StrapError varName
+        processFor _ varName _ _ _ _ = throwError $ StrapError varName

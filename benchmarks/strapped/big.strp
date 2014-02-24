@@ -1,0 +1,6 @@
+{@ let time = ioTime @}
+{@ extends base.strp @}
+Blah blah blah
+{@ let dynDecl2 = ioFunction @}
+@{ dynDecl }@{ dynDecl2 }"
+{@ isblock body @} @{time} {@ for i in is @}{@ let dynDeclFor = ioTime @} @{ time } @{ dynDeclFor }{@ endfor @} {@ endisblock @}
