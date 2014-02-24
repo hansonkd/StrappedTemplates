@@ -1,4 +1,6 @@
-module Strapped.Parser where
+module Text.Strapped.Parser
+  ( parseTemplate
+  ) where
 
 import Control.Applicative ((<*>))
 import Control.Monad
@@ -8,7 +10,8 @@ import Blaze.ByteString.Builder as B
 import Blaze.ByteString.Builder.Char.Utf8 as B
 import Text.ParserCombinators.Parsec
 import Text.Parsec.Prim (getState, modifyState)
-import Strapped.Types
+
+import Text.Strapped.Types
 
 wordString = many1 $ oneOf "_" <|> alphaNum
 pathString = many1 $ oneOf "_./" <|> alphaNum
@@ -24,10 +27,11 @@ parseContent end = do
   extends <- many (try parseExtends)
   ps <- manyTill parsePiece end
   
-  -- Throw away all other content if we have an extends (we already parsed out blocks)
+  -- Throw away all other content if we have an extends (we already parsed out
+  -- blocks at this point.)
   case (extends) of
     (e:_) -> return $ (decls) ++ [e]
-    _     -> return $ (decls) ++ (combineStatics ps)
+    _     -> return $ (decls) ++ (compress ps)
   
 parseBlock = do
   blockName <- tag (string "block" >> spaces >> wordString) <?> "Block tag"
@@ -45,7 +49,7 @@ parseFor = do
         l <- wordString
         return (v, l)
 
-parseDecl = do {decl <- tag parserDecl; spaces; return decl}
+parseDecl = do {spaces; decl <- tag parserDecl; spaces; return decl}
   where parserDecl = do
           string "let" >> spaces
           varName <- wordString
@@ -97,23 +101,15 @@ parseToTemplate = do
     c <- parseContent eof
     blks <- getState
     return $ Template c blks
-{-
-  Refactor this section.
--}
-isStatic :: Piece -> Bool
-isStatic (StaticPiece _) = True
-isStatic _ = False
 
-unStatic :: Piece -> Output
-unStatic (StaticPiece s) = s
-unStatic _ = error "unStatic: applied to something other than a StaticPiece"
+-- | Put statics together.
+compress :: [Piece] -> [Piece] 
+compress pieces = loop mempty pieces
+  where loop accum [] = accum
+        loop ((StaticPiece s):accum) ((StaticPiece s2):ps) = loop (accum <> [StaticPiece (s <> s2)]) ps
+        loop accum (p:ps) = loop (accum <> [p]) ps
 
-combineStatics :: [Piece] -> [Piece] 
-combineStatics pieces = let (nonstatics,therest) = span (not.isStatic) pieces in
-    nonstatics ++ combine therest where
-      combine [] = []
-      combine ps = let (statics,more) = span isStatic ps in
-        (StaticPiece . mconcat . map unStatic) statics : combineStatics more
-
+-- | Take a template body and a template name and return either an error or a
+--   renderable template.
 parseTemplate :: String -> String -> Either ParseError Template
 parseTemplate s tmplN = runParser parseToTemplate mempty tmplN s

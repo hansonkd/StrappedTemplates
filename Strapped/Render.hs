@@ -1,28 +1,48 @@
-module Strapped.Render where
-  
+module Text.Strapped.Render 
+  ( combineBuckets
+  , varBucket
+  , render
+  ) where
+
+import Blaze.ByteString.Builder
+import Blaze.ByteString.Builder.Char8
 import Control.Monad
-import Data.Monoid ((<>), mempty)
+import Data.Monoid ((<>), mempty, mconcat)
 import Control.Monad.Error
 import Control.Monad.IO.Class
 import Data.Maybe (catMaybes)
-import Strapped.Types
 
--- | If the first getter fails, try the second.
-combineGetter :: InputGetter m -> InputGetter m -> InputGetter m
-combineGetter g1 g2 i = maybe (g2 i) Just (g1 i) 
+import Text.Strapped.Types
 
-varGetter :: String -> Input m -> InputGetter m
-varGetter varName o v | v == varName = Just o
+instance Renderable Builder where
+  renderOutput = id             
+
+instance Renderable Literal where
+  renderOutput (LitString s)  = fromString s
+  renderOutput (LitInt i)     = renderOutput (LitString $ show i)
+  renderOutput (LitBuilder b) = b
+  renderOutput (LitList l)    = mconcat $ map renderOutput l 
+  
+-- | If the first bucket fails, try the second.
+combineBuckets :: InputBucket m -> InputBucket m -> InputBucket m
+combineBuckets g1 g2 i = maybe (g2 i) Just (g1 i) 
+
+-- | Basic bucket. Matches on string and return input. Returns Nothing for
+--   everything else.
+varBucket :: String -> Input m -> InputBucket m
+varBucket varName o v | v == varName = Just o
                       | otherwise    = Nothing
 
-render :: MonadIO m => TemplateStore -> InputGetter m -> String -> m (Either StrapError Output)
+-- | Using a 'TemplateStore' and an 'InputBucket' render the template name.
+render :: MonadIO m => TemplateStore -> InputBucket m -> String -> m (Either StrapError Output)
 render tmplStore getter' tmplName = do
       tmpl <- liftIO $ tmplStore tmplName
       maybe (return $ Left $ TemplateNotFound tmplName) 
             (\(Template c blks) -> runErrorT $ loop mempty blks getter' c) 
             tmpl
   where loop accum _ _ [] = return accum
-        loop accum blks getter ((StaticPiece s):ps) = loop (accum <> s) blks getter ps
+        loop accum blks getter ((StaticPiece s):ps) = 
+          loop (accum <> s) blks getter ps
         loop accum blks getter ((BlockPiece n def):ps) = 
           (maybe (loop accum blks getter def) 
                  (\content -> loop accum blks getter content)
@@ -43,21 +63,25 @@ render tmplStore getter' tmplName = do
             maybe (throwError $ TemplateNotFound n) 
                   (\(Template c _) -> (loop accum blks getter  c) >>= 
                                       (\a -> loop a blks getter ps))
-        loop accum blks getter ((Decl n fn arg):ps) = 
-          (loop mempty blks getter [FuncPiece fn arg]) >>= 
-          (\r -> loop accum blks (combineGetter (varGetter n (Value r)) getter) ps)
+        loop accum blks getter ((Decl n fn args):ps) = 
+          case (getter fn) of
+            Just (Func f) -> parseArgs args getter >>= f >>= (\r -> loop accum blks (combineBuckets (varBucket n (LitVal r)) getter) ps)
+            Just v        -> loop accum blks (combineBuckets (varBucket n v) getter) ps
+            Nothing       -> throwError $ InputNotFound fn
         -- 0 arity functions could be a value or a monadic function.
         loop accum blks getter ((FuncPiece n []):ps) = 
           case (getter n) of
               Just (Func f) -> (f []) >>= 
-                               (\s -> loop (accum <> s) blks getter ps)
-              Just (Value v) -> loop (accum <> v) blks getter ps
+                               (\s -> loop (accum <> (renderOutput s)) blks getter ps)
+              Just (RenderVal v) -> loop (accum <> (renderOutput v)) blks getter ps
+              Just (LitVal v) -> loop (accum <> (renderOutput v)) blks getter ps
+              Just _ -> throwError $ StrapError $ n ++ " is not a function."
               Nothing -> throwError $ InputNotFound n
         loop accum blks getter ((FuncPiece n args):ps) = 
           case (getter n) of
               Just (Func f) ->  (parseArgs args getter) >>= 
                                 (\inputs -> (f inputs) >>= 
-                                            (\s -> loop (accum <> s) blks getter ps)
+                                            (\s -> loop (accum <> (renderOutput s)) blks getter ps)
                                 )
               Just _ -> throwError $ StrapError $ n ++ " is not a function."
               Nothing -> throwError $ InputNotFound n
@@ -66,7 +90,7 @@ render tmplStore getter' tmplName = do
         parseArgs args getter = (forM args (\arg -> maybe (throwError $ InputNotFound arg) return (getter arg)))
         
         processFor getter varName content accum blks (List objs) = loopFor accum objs
-          where loopGetter o = combineGetter (varGetter varName o) getter
+          where loopGetter o = combineBuckets (varBucket varName o) getter
                 loopFor accum [] = return accum
                 loopFor accum (o:os) = do
                       s <- loop accum blks (loopGetter o) content

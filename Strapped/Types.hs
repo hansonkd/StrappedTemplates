@@ -1,4 +1,5 @@
-module Strapped.Types where
+{-# LANGUAGE ExistentialQuantification #-}
+module Text.Strapped.Types where
 
 import Blaze.ByteString.Builder
 import Blaze.ByteString.Builder.Char8
@@ -16,17 +17,19 @@ data Piece = StaticPiece Output
            | Decl String String [String]
            | Include String
            | Extends String
-           
-instance Show Piece where
-  show (StaticPiece a) = "StaticPiece " ++ (show $ toByteString a)
-  show (Decl n f args) = "Decl " ++ n ++ " " ++ f ++ " " ++ (show args)
-  show (Extends e) = "Extends " ++ e
-  show _ = "eh"
   
-data Input m = 
-             Value Output 
+class Renderable a where
+  renderOutput :: a -> Output
+  
+data Input m = forall a . Renderable a => RenderVal a
            | List [Input m]
-           | Func  ([Input m] -> ErrorT StrapError m Output)  
+           | Func  ([Input m] -> ErrorT StrapError m Literal)
+           | LitVal Literal
+
+data Literal = LitString String
+             | LitInt Int
+             | LitBuilder Builder
+             | LitList [Literal]
 
 data StrapError = StrapError String | InputNotFound String | TemplateNotFound String
   deriving (Show)
@@ -35,9 +38,8 @@ instance Error StrapError where
   noMsg    = StrapError "A Strap Error"
   strMsg s = StrapError s
 
-type InputGetter m = String -> Maybe (Input m)
+type InputBucket m = String -> Maybe (Input m)
 
 type TemplateStore = String -> IO (Maybe Template)
 
 data Template = Template [Piece] [(String, [Piece])]
-  deriving (Show)
