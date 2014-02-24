@@ -2,11 +2,8 @@
 module Text.Strapped.Types where
 
 import Blaze.ByteString.Builder
-import Blaze.ByteString.Builder.Char8
 import Control.Monad.Error
-import Data.Text as T
-
-packInput = fromString
+import Data.Text.Lazy
 
 type Output = Builder
 
@@ -19,14 +16,15 @@ data Piece = StaticPiece Output
            | Extends String
   
 class Renderable a where
-  renderOutput :: a -> Output
+  renderOutput :: RenderConfig -> a -> Output
   
 data Input m = forall a . Renderable a => RenderVal a
            | List [Input m]
            | Func  ([Input m] -> ErrorT StrapError m Literal)
            | LitVal Literal
 
-data Literal = LitString String
+data Literal = LitText Text
+             | LitSafe Text
              | LitInt Int
              | LitBuilder Builder
              | LitList [Literal]
@@ -43,3 +41,8 @@ type InputBucket m = String -> Maybe (Input m)
 type TemplateStore = String -> IO (Maybe Template)
 
 data Template = Template [Piece] [(String, [Piece])]
+
+data RenderConfig = RenderConfig 
+  { templateStore :: TemplateStore
+  , escapeFunc :: Text -> Text
+  }

@@ -1,9 +1,6 @@
 import Control.Monad
 import Control.Monad.IO.Class
-import Strapped.Parser
-import Strapped.Render 
-import Strapped.Types
-import Strapped.Utils
+import Text.Strapped
 import Criterion.Main
 import qualified Blaze.ByteString.Builder as B
 

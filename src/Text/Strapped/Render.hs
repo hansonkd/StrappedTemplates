@@ -2,6 +2,7 @@ module Text.Strapped.Render
   ( combineBuckets
   , varBucket
   , render
+  , defaultConfig
   ) where
 
 import Blaze.ByteString.Builder
@@ -11,18 +12,23 @@ import Data.Monoid ((<>), mempty, mconcat)
 import Control.Monad.Error
 import Control.Monad.IO.Class
 import Data.Maybe (catMaybes)
-
+import qualified Data.Text.Lazy as T
 import Text.Strapped.Types
 
 instance Renderable Builder where
-  renderOutput = id             
+  renderOutput _ = id
 
 instance Renderable Literal where
-  renderOutput (LitString s)  = fromString s
-  renderOutput (LitInt i)     = renderOutput (LitString $ show i)
-  renderOutput (LitBuilder b) = b
-  renderOutput (LitList l)    = mconcat $ map renderOutput l 
+  renderOutput (RenderConfig _ ef) (LitText s) = fromText $ T.toStrict $ ef s
+  renderOutput _ (LitSafe s)     = fromText $ T.toStrict s
+  renderOutput rc (LitInt i)     = renderOutput rc (LitText $ T.pack $ show i)
+  renderOutput _ (LitBuilder b)  = b
+  renderOutput rc (LitList l)    = mconcat $ map (renderOutput rc) l 
   
+-- | Default render configuration. No text escaping.
+defaultConfig :: RenderConfig
+defaultConfig = RenderConfig (\_ -> return Nothing) id
+
 -- | If the first bucket fails, try the second.
 combineBuckets :: InputBucket m -> InputBucket m -> InputBucket m
 combineBuckets g1 g2 i = maybe (g2 i) Just (g1 i) 
@@ -34,14 +40,15 @@ varBucket varName o v | v == varName = Just o
                       | otherwise    = Nothing
 
 -- | Using a 'TemplateStore' and an 'InputBucket' render the template name.
-render :: MonadIO m => TemplateStore -> InputBucket m -> String -> m (Either StrapError Output)
-render tmplStore getter' tmplName = do
+render :: MonadIO m => RenderConfig -> InputBucket m -> String -> m (Either StrapError Output)
+render renderConfig getter' tmplName = do
       tmpl <- liftIO $ tmplStore tmplName
       maybe (return $ Left $ TemplateNotFound tmplName) 
             (\(Template c blks) -> runErrorT $ loop mempty blks getter' c) 
             tmpl
-  where loop accum _ _ [] = return accum
-        loop accum blks getter ((StaticPiece s):ps) = 
+  where tmplStore = templateStore renderConfig
+        loop accum _ _ [] = return accum
+        loop accum blks getter ((StaticPiece s):ps) =
           loop (accum <> s) blks getter ps
         loop accum blks getter ((BlockPiece n def):ps) = 
           (maybe (loop accum blks getter def) 
@@ -72,16 +79,16 @@ render tmplStore getter' tmplName = do
         loop accum blks getter ((FuncPiece n []):ps) = 
           case (getter n) of
               Just (Func f) -> (f []) >>= 
-                               (\s -> loop (accum <> (renderOutput s)) blks getter ps)
-              Just (RenderVal v) -> loop (accum <> (renderOutput v)) blks getter ps
-              Just (LitVal v) -> loop (accum <> (renderOutput v)) blks getter ps
+                               (\s -> loop (accum <> (renderOutput renderConfig s)) blks getter ps)
+              Just (RenderVal v) -> loop (accum <> (renderOutput renderConfig v)) blks getter ps
+              Just (LitVal v) -> loop (accum <> (renderOutput renderConfig v)) blks getter ps
               Just _ -> throwError $ StrapError $ n ++ " is not a function."
               Nothing -> throwError $ InputNotFound n
         loop accum blks getter ((FuncPiece n args):ps) = 
           case (getter n) of
               Just (Func f) ->  (parseArgs args getter) >>= 
                                 (\inputs -> (f inputs) >>= 
-                                            (\s -> loop (accum <> (renderOutput s)) blks getter ps)
+                                            (\s -> loop (accum <> (renderOutput renderConfig s)) blks getter ps)
                                 )
               Just _ -> throwError $ StrapError $ n ++ " is not a function."
               Nothing -> throwError $ InputNotFound n

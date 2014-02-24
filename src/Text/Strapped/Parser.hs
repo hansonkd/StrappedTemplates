@@ -62,7 +62,7 @@ parseIsBlock = do
       blockName <- tag (string "isblock" >> spaces >> wordString)
       blockContent <- parseContent (tryTag $ string "endisblock") 
       modifyState (\blks -> (blockName, blockContent):blks)
-      return $ StaticPiece (packInput [])
+      return $ StaticPiece (fromString [])
 
 parseInclude = tag parserInclude
   where parserInclude = do
@@ -86,7 +86,7 @@ parseFunc = do
 parseStatic = do
   c <- anyChar
   s <- manyTill anyChar (peekChar '{' <|> peekChar '@' <|> eof)
-  return $ StaticPiece (packInput $ c:s)
+  return $ StaticPiece (B.fromString $ c:s)
 
 parseNonStatic =  try parseBlock 
               <|> try parseFor
