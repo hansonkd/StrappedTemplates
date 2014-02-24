@@ -1,9 +1,8 @@
 {@ let time = ioTime @}
-{@ extends base.strp @}
-Blah blah blah
-{@ let dynDecl2 = ioFunction @}
-@{ dynDecl }@{ dynDecl2 }"
-{@ isblock body @} @{time}
+{@ inherits base.strp @}
+
+{@ isblock body @} 
+  @{time}
   {@ for i in is @}
     {@ for i in is @}
       @{ time }

@@ -23,15 +23,17 @@ tryTag = void . try . tag
 tag p = between (string "{@" >> spaces) (spaces >> string "@}") p <?> "Tag"
 
 parseContent end = do
-  decls <- many (try parseDecl)
-  extends <- many (try parseExtends)
-  ps <- manyTill parsePiece end
-  
-  -- Throw away all other content if we have an extends (we already parsed out
-  -- blocks at this point.)
+  decls <- many (try $ spaces >> parseDecl)
+  spaces
+  extends <- optionMaybe (try $ spaces >> parseInherits)
   case (extends) of
-    (e:_) -> return $ (decls) ++ [e]
-    _     -> return $ (decls) ++ (compress ps)
+    Just e -> do
+      includes <- manyTill parseIsIgnoreSpace end
+      return $ (decls) ++ [Inherits e includes]
+    _     -> do
+      ps <- manyTill parsePiece end
+      return $ decls ++ ps
+  where parseIsIgnoreSpace = do {spaces; b <- parseIsBlock; spaces; return b}
   
 parseBlock = do
   blockName <- tag (string "block" >> spaces >> wordString) <?> "Block tag"
@@ -49,7 +51,7 @@ parseFor = do
         l <- wordString
         return (v, l)
 
-parseDecl = do {spaces; decl <- tag parserDecl; spaces; return decl}
+parseDecl = do {spaces; decl <- tag parserDecl; spaces; return decl} <?> "Let tag"
   where parserDecl = do
           string "let" >> spaces
           varName <- wordString
@@ -59,29 +61,25 @@ parseDecl = do {spaces; decl <- tag parserDecl; spaces; return decl}
           return $ Decl varName func args
           
 parseIsBlock = do
-      blockName <- tag (string "isblock" >> spaces >> wordString)
+      blockName <- tag (string "isblock" >> spaces >> wordString) <?> "Isblock tag"
       blockContent <- parseContent (tryTag $ string "endisblock") 
-      modifyState (\blks -> (blockName, blockContent):blks)
-      return $ StaticPiece (fromString [])
+      return (blockName, blockContent)
 
-parseInclude = tag parserInclude
+parseInclude = tag parserInclude <?> "Include tag"
   where parserInclude = do
                 string "include" >> spaces
                 includeName <- pathString
                 return $ Include includeName
 
-parseExtends = tag parserInclude
-  where parserInclude = do
-                string "extends" >> spaces
-                includeName <- pathString
-                return $ Extends includeName 
+parseInherits = tag (string "inherits" >> spaces >> pathString) <?> "Inherits tag"
 
-parseFunc = do
-  (string "@{" >> spaces)
-  var <- wordString
-  spaces
-  args <- manyTill (spaces >> wordString) (try $ spaces >> string "}")
-  return $ FuncPiece var args
+parseFunc = parserFunc <?> "Call tag"
+  where parserFunc = do
+          string "@{" >> spaces
+          var <- wordString
+          spaces
+          args <- manyTill (spaces >> wordString) (try $ spaces >> string "}")
+          return $ FuncPiece var args
 
 parseStatic = do
   c <- anyChar
@@ -90,26 +88,15 @@ parseStatic = do
 
 parseNonStatic =  try parseBlock 
               <|> try parseFor
-              <|> try parseIsBlock
               <|> try parseInclude 
               <|> parseFunc
 parsePiece = (try parseNonStatic <|> parseStatic)
 
 parsePieces = parseContent eof
 
-parseToTemplate = do
-    c <- parseContent eof
-    blks <- getState
-    return $ Template c blks
-
--- | Put statics together.
-compress :: [Piece] -> [Piece] 
-compress pieces = loop mempty pieces
-  where loop accum [] = accum
-        loop ((StaticPiece s):accum) ((StaticPiece s2):ps) = loop (accum <> [StaticPiece (s <> s2)]) ps
-        loop accum (p:ps) = loop (accum <> [p]) ps
+parseToTemplate = (parseContent eof) >>= (return . Template)
 
 -- | Take a template body and a template name and return either an error or a
 --   renderable template.
 parseTemplate :: String -> String -> Either ParseError Template
-parseTemplate s tmplN = runParser parseToTemplate mempty tmplN s
+parseTemplate s tmplN = parse parseToTemplate tmplN s

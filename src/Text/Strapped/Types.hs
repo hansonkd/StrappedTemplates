@@ -13,15 +13,15 @@ data Piece = StaticPiece Output
            | FuncPiece String [String]
            | Decl String String [String]
            | Include String
-           | Extends String
+           | Inherits String [(String, [Piece])]
   
 class Renderable a where
   renderOutput :: RenderConfig -> a -> Output
   
 data Input m = forall a . Renderable a => RenderVal a
-           | List [Input m]
-           | Func  ([Input m] -> ErrorT StrapError m Literal)
-           | LitVal Literal
+             | List [Input m]
+             | Func  ([Input m] -> ErrorT StrapError m Literal)
+             | LitVal Literal
 
 data Literal = LitText Text
              | LitSafe Text
@@ -40,7 +40,7 @@ type InputBucket m = String -> Maybe (Input m)
 
 type TemplateStore = String -> IO (Maybe Template)
 
-data Template = Template [Piece] [(String, [Piece])]
+data Template = Template [Piece]
 
 data RenderConfig = RenderConfig 
   { templateStore :: TemplateStore

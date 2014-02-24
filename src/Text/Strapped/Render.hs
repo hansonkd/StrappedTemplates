@@ -44,7 +44,7 @@ render :: MonadIO m => RenderConfig -> InputBucket m -> String -> m (Either Stra
 render renderConfig getter' tmplName = do
       tmpl <- liftIO $ tmplStore tmplName
       maybe (return $ Left $ TemplateNotFound tmplName) 
-            (\(Template c blks) -> runErrorT $ loop mempty blks getter' c) 
+            (\(Template c) -> runErrorT $ loop mempty mempty getter' c) 
             tmpl
   where tmplStore = templateStore renderConfig
         loop accum _ _ [] = return accum
@@ -53,23 +53,23 @@ render renderConfig getter' tmplName = do
         loop accum blks getter ((BlockPiece n def):ps) = 
           (maybe (loop accum blks getter def) 
                  (\content -> loop accum blks getter content)
-                  (lookup n blks)
+                 (lookup n blks)
           ) >>= (\a -> loop a blks getter ps)
         loop accum blks getter ((ForPiece n l c):ps) = 
           maybe (throwError $ InputNotFound n) 
           (\l -> (processFor getter n c accum blks l) >>= 
                  (\a -> loop a blks getter ps))
           (getter l)
-        loop accum blks getter ((Extends n):ps) =
+        loop accum blks getter ((Inherits n b):ps) =
             liftIO (tmplStore n) >>=
             maybe (throwError $ TemplateNotFound n) 
-                  (\(Template c b) -> (loop accum (blks ++ b) getter c) >>= 
-                                      (\a -> loop a blks getter ps))
+                  (\(Template c) -> (loop accum (b ++ blks) getter c) >>= 
+                                    (\a -> loop a blks getter ps))
         loop accum blks getter ((Include n):ps) =
             liftIO (tmplStore n) >>=
             maybe (throwError $ TemplateNotFound n) 
-                  (\(Template c _) -> (loop accum blks getter  c) >>= 
-                                      (\a -> loop a blks getter ps))
+                  (\(Template c) -> (loop accum blks getter c) >>=
+                                    (\a -> loop a blks getter ps))
         loop accum blks getter ((Decl n fn args):ps) = 
           case (getter fn) of
             Just (Func f) -> parseArgs args getter >>= f >>= (\r -> loop accum blks (combineBuckets (varBucket n (LitVal r)) getter) ps)

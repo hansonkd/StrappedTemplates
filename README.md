@@ -124,10 +124,9 @@ The other template: Other Template
 ```
 
 
-### Extends
+### Inheritance
 
-You can call an "extend" which extends the current "block context" and declarations into another template. If you have an includes, it must come at the beginning of your document (after `let` declerations). 
-Everything in that template after the first includes statement will be ignored, execpt for `isblock` tags. 
+Any block, forloop, or template can inherit from another template. This allows you to specify a base template with `block` tags that will get filled by content defined in `isblock`. If an `inherits` tag is encountered, only `isblock` tags will be allowed at that level. 
 
 base.strp
 ```html
@@ -135,18 +134,40 @@ This is a base template
 @{ time }
 {@ block title @} Default Title {@ endblock @}
 Footer.
+{@ block body @} Default Body {@ endblock @}
 ```
 
 ```html
 {@ let time = ioTime @}
 {@ extends base.strp @}
-This will be ignored.
+
 {@ isblock title @}Block title!!{@ endisblock @}
+{@ isblock title @}Block Body!!{@ endisblock @}
+```
+
+Here is an example of using inheritence at different levels:
+
+```html
+{@ let time = ioTime @}
+
+{@ inherits base.strp @}
+
+{@ isblock title @}Outside of loop{@ endisblock @}
+
+{@ isblock body @}
+  {@ for i in is @}
+    {@ inherits base.strp @}
+    {@ isblock title @}Inside loop{@ endisblock @}
+    {@ isblock body @}
+      Called from for loop @{ i }
+    {@ endisblock @}
+  {@ endfor @}
+{@ endisblock @}
 ```
 
 Speed
 =====
 
-Strapped preloads and tokenizes your templates before render time. This results in overall good performance. It is about as fast as Blaze-Html in normal linear templates. Agravating the garbage collection and doing a nested loop slows it down about 2x slower than Blaze-Html, which is still pretty fast. It is significantly (orders of magnitude) faster than interpreted templates like Interpreted-Heist and Hastache. 
+Strapped preloads and tokenizes your templates before render time. This results in overall good performance. It is about as fast as Blaze-Html in normal linear templates. Agravating the garbage collection and doing large loops inside loops slows it down about 2x slower than Blaze-Html, which is still pretty fast. It is significantly (orders of magnitude) faster than interpreted templates like Django, Interpreted-Heist and Hastache.
 
 I haven't spent spent much time optimizing so there is still room for improvement. Feel free to run the benchmarks or optimize them more.
