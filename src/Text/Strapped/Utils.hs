@@ -15,6 +15,7 @@ templateStoreFromList tmpls = do
   templateTups <- forM tmpls (\(tn, t) -> fmap ((,) tn) $ parseTemplate t tn)
   return (\n -> return $ lookup n templateTups)
 
+-- | Given a file path and extension, load all templates in a directory, recursively.
 templateStoreFromDirectory :: FilePath -> String -> IO (Either ParseError TemplateStore)
 templateStoreFromDirectory dir ext = do
   files <- find always (extension ==? ext) dirPath
