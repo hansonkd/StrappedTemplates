@@ -99,7 +99,6 @@ At the start of every template, block, or forloop, you can do stuff like this:
   <li> @{ val } </li>
   {@ endfor @}
 </ul>
-
 ```
 
 ### Includes
@@ -168,6 +167,6 @@ Here is an example of using inheritence at different levels:
 Speed
 =====
 
-Strapped preloads and tokenizes your templates before render time. This results in overall good performance. It is about as fast as Blaze-Html in normal linear templates. Agravating the garbage collection and doing large loops inside loops slows it down about 2x slower than Blaze-Html, which is still pretty fast. It is significantly (orders of magnitude) faster than interpreted templates like Django, Interpreted-Heist and Hastache.
+Strapped preloads and tokenizes your templates before render time. This results in overall good performance. It is about as fast as Blaze-Html in normal linear templates. Agravating the garbage collection and doing large loops inside loops slows it down about 2x slower than Blaze-Html, which is still pretty fast. It is significantly (orders of magnitude) faster than interpreted templates like Django, Interpreted-Heist and Hastache and up to 2x as fast as Mako compiled python templates.
 
 I haven't spent spent much time optimizing so there is still room for improvement. Feel free to run the benchmarks or optimize them more.

@@ -9,9 +9,10 @@ template = """
     % endfor
 % endfor
 """
+template = Template(template)
 
 def render():
-    return Template(template).render(rows=range(0,100))
+    return template.render(rows=range(0,100))
 
 if __name__ == '__main__':   
     timer = timeit.Timer(render)
