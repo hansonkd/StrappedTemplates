@@ -6,7 +6,7 @@ module Text.Strapped.Render
   ) where
 
 import Blaze.ByteString.Builder
-import Blaze.ByteString.Builder.Char8
+import Blaze.ByteString.Builder.Char.Utf8
 import Control.Monad
 import Data.Monoid ((<>), mempty, mconcat)
 import Control.Monad.Error
@@ -19,10 +19,10 @@ instance Renderable Builder where
   renderOutput _ = id
 
 instance Renderable Literal where
-  renderOutput (RenderConfig _ ef) (LitText s) = fromText $ T.toStrict $ ef s
-  renderOutput _ (LitSafe s)     = fromText $ T.toStrict s
-  renderOutput rc (LitInteger i)     = renderOutput rc (LitText $ T.pack $ show i)
-  renderOutput rc (LitDouble i)   = renderOutput rc (LitText $ T.pack $ show i)
+  renderOutput (RenderConfig _ ef) (LitText s) = fromLazyText $ ef s
+  renderOutput _ (LitSafe s)     = fromLazyText s
+  renderOutput rc (LitInteger i) = fromShow i
+  renderOutput rc (LitDouble i)  = fromShow i
   renderOutput _ (LitBuilder b)  = b
   renderOutput rc (LitList l)    = mconcat $ map (renderOutput rc) l 
   renderOutput rc (LitDyn r) = renderOutput rc r
@@ -97,14 +97,13 @@ render renderConfig getter' tmplName = do
             maybe (throwError $ TemplateNotFound n) 
                   (\(Template c) -> (loop accum blks getter c) >>=
                                     (\a -> loop a blks getter ps))
-        loop accum blks getter ((Decl n exp):ps) = (reduceExpression renderConfig exp getter) >>=
-                                                   (\v -> loop accum blks (combineBuckets (varBucket n (LitVal v)) getter) ps)
+        loop accum blks getter ((Decl n exp):ps) = 
+            (reduceExpression renderConfig exp getter) >>=
+            (\v -> loop accum blks (combineBuckets (varBucket n (LitVal v)) getter) ps)
 
-        loop accum blks getter ((FuncPiece exp):ps) = (reduceExpression renderConfig exp getter) >>= 
-                                                         (\r -> loop (accum <> (renderOutput renderConfig r)) blks getter ps)
-
-        parseArgs args getter = (forM args (\arg -> maybe (throwError $ InputNotFound arg) return (getter arg)))
-        
+        loop accum blks getter ((FuncPiece exp):ps) = 
+            (reduceExpression renderConfig exp getter) >>= 
+            (\r -> loop (accum <> (renderOutput renderConfig r)) blks getter ps)      
         
         processFor getter varName content accum blks (List objs) = loopFor accum objs
           where loopGetter o = combineBuckets (varBucket varName o) getter

@@ -1,7 +1,7 @@
 module Text.Strapped.Utils where
 
 import           Blaze.ByteString.Builder
-import           Blaze.ByteString.Builder.Char8
+import           Blaze.ByteString.Builder.Char.Utf8
 import           Control.Monad
 import           Data.List hiding (find)
 import qualified Data.Text.Lazy as T
@@ -28,4 +28,4 @@ templateStoreFromDirectory dir ext = do
   where dirPath = addTrailingPathSeparator dir
 
 showToBuilder :: Show a => a -> Builder
-showToBuilder = fromText . T.toStrict . T.pack . show 
+showToBuilder = fromShow
