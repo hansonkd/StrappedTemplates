@@ -86,7 +86,7 @@ bucket _    = Nothing
 
 ### In template declarations
 
-At the start of every template, block, or forloop, you can do stuff like this:
+At the start of every template, block, or forloop, you can define template variables with a let tag.
 
 ```html
 {@ let time = ioTime @}
@@ -103,7 +103,7 @@ At the start of every template, block, or forloop, you can do stuff like this:
 
 ### Includes
 
-You can easily call other in other templates.
+You can easily include other templates.
 
 includes.strp
 ```html 
@@ -132,13 +132,12 @@ base.strp
 This is a base template
 @{ time }
 {@ block title @} Default Title {@ endblock @}
-Footer.
 {@ block body @} Default Body {@ endblock @}
 ```
 
 ```html
 {@ let time = ioTime @}
-{@ extends base.strp @}
+{@ inherits base.strp @}
 
 {@ isblock title @}Block title!!{@ endisblock @}
 {@ isblock title @}Block Body!!{@ endisblock @}

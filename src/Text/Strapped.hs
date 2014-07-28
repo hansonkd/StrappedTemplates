@@ -2,6 +2,7 @@ module Text.Strapped
   ( -- * Rendering
     render
   , defaultConfig
+  , showToBuilder
     -- ** Controlling variables 
   , combineBuckets
   , varBucket

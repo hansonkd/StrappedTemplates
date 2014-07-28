@@ -1,0 +1,15 @@
+{@ let startTime = ioTime @}
+{@ inherits base.strp @}
+
+{@ isblock body @} 
+  @{startTime}
+  @{custom}
+  @{ diffTime [startTime, whenLoaded]}
+  {@ for i in is @}
+    AddNumbers: @{ addNumbers [(addNumbers [i, i]), i, 6] }
+    {@ for i in is @}
+      @{ diffTime [startTime, ioTime] }
+      @{ i }
+    {@ endfor @}
+  {@ endfor @}
+{@ endisblock @}
