@@ -40,14 +40,12 @@ makeBucket i t = bucket
             Nothing -> return $ LitText $ T.pack "Only UTCTimes Please..."
 
 main :: IO ()
-main = do
-  print $ parseTemplate "{@ let time = ioTime [i, i, 2.0, 2] @}" "time"
-  
+main = do 
   tmpls <- templateStoreFromDirectory "benchmarks/strapped_templates" ".strp"
   time <-getCurrentTime
   case tmpls of
     Left err -> print err
     Right store -> do
-      rendered <- render (defaultConfig {templateStore = store}) (makeBucket 10 time) "big-complex.strp"
+      rendered <- render (defaultConfig {templateStore = store}) (makeBucket 100 time) "big-complex.strp"
       either (print) (BS.putStr . B.toByteString) rendered
   
