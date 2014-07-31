@@ -5,6 +5,7 @@ import Blaze.ByteString.Builder
 import Control.Monad.Error
 import Data.Text.Lazy
 import Data.Typeable
+import Text.Parsec.Pos
 
 type Output = Builder
 
@@ -21,13 +22,16 @@ data Expression =
   deriving (Show)
 
 data Piece = StaticPiece Output
-           | BlockPiece String [Piece]
-           | ForPiece String String [Piece]
+           | BlockPiece String [ParsedPiece]
+           | ForPiece String Expression [ParsedPiece]
            | FuncPiece Expression
            | Decl String Expression
            | Include String
-           | Inherits String [(String, [Piece])]
+           | Inherits String [(String, [ParsedPiece])]
            deriving (Show)
+
+data ParsedPiece = ParsedPiece Piece SourcePos
+  deriving (Show)
   
 class Renderable a where
   renderOutput :: RenderConfig -> a -> Output
@@ -46,18 +50,18 @@ data Literal = forall a . (Typeable a, Renderable a) => LitDyn a
              | LitList [Literal]
              | LitEmpty
 
-data StrapError = StrapError String | InputNotFound String | TemplateNotFound String
+data StrapError = StrapError String  SourcePos | InputNotFound String  SourcePos | TemplateNotFound String  SourcePos
   deriving (Show)
   
 instance Error StrapError where
-  noMsg    = StrapError "A Strap Error"
-  strMsg s = StrapError s
+  noMsg    = StrapError "A Strap Error" (initialPos "empty")
+  strMsg s = StrapError s (initialPos "empty")
 
 type InputBucket m = String -> Maybe (Input m)
 
 type TemplateStore = String -> IO (Maybe Template)
 
-data Template = Template [Piece]
+data Template = Template [ParsedPiece]
   deriving Show
 
 data RenderConfig = RenderConfig 
