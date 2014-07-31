@@ -9,7 +9,7 @@ import Text.ParserCombinators.Parsec
 import Data.Time
 
 makeBucket :: Integer -> InputBucket IO
-makeBucket i = bucket 
+makeBucket i = bucket
   where bucket "is" = Just $ List $ map (LitVal . LitInteger) [1..i]
         bucket _ = Nothing
 
