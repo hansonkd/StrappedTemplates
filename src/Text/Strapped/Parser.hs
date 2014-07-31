@@ -46,57 +46,63 @@ parseContent end = do
   spaces
   extends <- optionMaybe (try $ spaces >> parseInherits)
   case (extends) of
-    Just e -> do
+    Just (e, epos) -> do
       includes <- manyTill parseIsIgnoreSpace end
-      return $ (decls) ++ [Inherits e includes]
+      return $ (decls) ++ [ParsedPiece (Inherits e includes) epos]
     _     -> do
       ps <- manyTill parsePiece end
       return $ decls ++ ps
   where parseIsIgnoreSpace = do {spaces; b <- parseIsBlock; spaces; return b}
   
 parseBlock = do
+  pos <- getPosition
   blockName <- tag (string "block" >> spaces >> wordString) <?> "Block tag"
   blockContent <- parseContent (tryTag $ string "endblock") 
-  return $ BlockPiece blockName blockContent
+  return $ ParsedPiece (BlockPiece blockName blockContent) pos
 
 parseFor = do
-  (newVarName, listName) <- tag (string "for" >> argParser) <?> "For tag"
+  pos <- getPosition
+  (newVarName, exp) <- (tagStart >> spaces >> string "for" >> argParser) <?> "For tag"
   blockContent <- parseContent (tryTag $ string "endfor") 
-  return $ ForPiece newVarName listName blockContent
+  return $ ParsedPiece (ForPiece newVarName exp blockContent) pos
   where argParser = do 
         spaces
         v <- wordString
         spaces >> (string "in") >> spaces
-        l <- wordString
-        return (v, l)
+        func <- parseExpression (try $ spaces >> tagEnd)
+        return (v, func)
 
 parseDecl = do {spaces; decl <- parserDecl; spaces; return decl} <?> "Let tag"
   where parserDecl = do
+          pos <- getPosition
           tagStart >> spaces
           string "let" >> spaces
           varName <- wordString
           spaces >> string "=" >> spaces
           func <- parseExpression (try $ spaces >> tagEnd)
-          return $ Decl varName func
+          return $ ParsedPiece (Decl varName func) pos
           
 parseIsBlock = do
       blockName <- tag (string "isblock" >> spaces >> wordString) <?> "Isblock tag"
       blockContent <- parseContent (tryTag $ string "endisblock") 
       return (blockName, blockContent)
 
-parseInclude = tag parserInclude <?> "Include tag"
-  where parserInclude = do
+parseInclude = do
+  pos <- getPosition
+  tag (parserInclude pos) <?> "Include tag"
+  where parserInclude pos = do
                 string "include" >> spaces
                 includeName <- pathString
-                return $ Include includeName
+                return $ ParsedPiece (Include includeName) pos
 
-parseInherits = tag (string "inherits" >> spaces >> pathString) <?> "Inherits tag"
+parseInherits = do {pos <- getPosition; mtag <- tag (string "inherits" >> spaces >> pathString); return (mtag, pos)} <?> "Inherits tag"
 
 parseFunc = parserFunc <?> "Call tag"
   where parserFunc = do
+          pos <- getPosition
           string "@{" >> spaces
           exp <- parseExpression (try $ spaces >> string "}")
-          return $ FuncPiece exp
+          return $ ParsedPiece (FuncPiece exp) pos
 
 parseExpression end = manyPart <?> "Expression"
   where parseAtomic  =  try parens
@@ -124,9 +130,10 @@ parseStringContents esc = between (char esc) (char esc) (many chars)
           replacements = ['\b', '\n', '\f', '\r', '\t', '\\', '\"', '\'', '/']
 
 parseStatic = do
+  pos <- getPosition
   c <- anyChar
   s <- manyTill anyChar (peekChar '{' <|> peekChar '@' <|> eof)
-  return $ StaticPiece (B.fromString $ c:s)
+  return $ ParsedPiece (StaticPiece (B.fromString $ c:s)) pos
 
 parseNonStatic =  try parseBlock 
               <|> try parseFor

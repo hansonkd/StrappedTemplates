@@ -41,7 +41,7 @@ varBucket :: String -> Input m -> InputBucket m
 varBucket varName o v | v == varName = Just o
                       | otherwise    = Nothing
 
-getOrThrow v getter = maybe (throwError $ InputNotFound v) return (getter v)
+getOrThrow v getter pos = maybe (throwError $ InputNotFound v pos) return (getter v)
 
 reduceExpression :: Monad m => RenderConfig -> Expression -> InputBucket m -> ErrorT StrapError m Literal
 reduceExpression c exp getter = convert exp
@@ -51,14 +51,14 @@ reduceExpression c exp getter = convert exp
         convert (Multipart []) = return $ LitEmpty
         convert (Multipart (f:[])) = convert f
         convert (Multipart ((LookupExpression func):args)) = do
-          val <- getOrThrow func getter
+          val <- getOrThrow func getter pos
           case val of
             (Func f) -> convert (Multipart args) >>= f
-            _ -> throwError $ StrapError $ func ++ " is not a function but has args: " ++ (show args)
-        convert (Multipart v) = throwError $ StrapError $ (show v) ++ " cannot be reduced."
+            _ -> throwError $ StrapError (func ++ " is not a function but has args: " ++ (show args)) pos
+        convert (Multipart v) = throwError $ StrapError ((show v) ++ " cannot be reduced.") pos
         convert (ListExpression args) = mapM convert args >>= (return . LitList) 
         convert (LookupExpression f) = do
-            val <- getOrThrow f getter
+            val <- getOrThrow f getter pos
             inputToLiteral val
         inputToLiteral inp = case inp of
                     (List args) -> mapM inputToLiteral args >>= (return . LitList)
@@ -75,40 +75,39 @@ render renderConfig getter' tmplName = do
             tmpl
   where tmplStore = templateStore renderConfig
         loop accum _ _ [] = return accum
-        loop accum blks getter ((StaticPiece s):ps) =
+        loop accum blks getter ((ParsedPiece (StaticPiece s) pos):ps) =
           loop (accum <> s) blks getter ps
-        loop accum blks getter ((BlockPiece n def):ps) = 
+        loop accum blks getter ((ParsedPiece (BlockPiece n def) pos):ps) = 
           (maybe (loop accum blks getter def) 
                  (\content -> loop accum blks getter content)
                  (lookup n blks)
           ) >>= (\a -> loop a blks getter ps)
-        loop accum blks getter ((ForPiece n l c):ps) = 
-          maybe (throwError $ InputNotFound n) 
-          (\l -> (processFor getter n c accum blks l) >>= 
-                 (\a -> loop a blks getter ps))
-          (getter l)
-        loop accum blks getter ((Inherits n b):ps) =
+        loop accum blks getter ((ParsedPiece (ForPiece n exp c) pos):ps) = do
+          var <- reduceExpression renderConfig exp getter
+          case var of 
+            LitList l -> (processFor getter n c accum blks l) >>= (\a -> loop a blks getter ps)
+            _ -> throwError $ StrapError (show exp ++ " is not a LitList") pos
+        loop accum blks getter ((ParsedPiece (Inherits n b) pos):ps) =
             liftIO (tmplStore n) >>=
-            maybe (throwError $ TemplateNotFound n) 
+            maybe (throwError (TemplateNotFound n) pos)
                   (\(Template c) -> (loop accum (b ++ blks) getter c) >>= 
                                     (\a -> loop a blks getter ps))
-        loop accum blks getter ((Include n):ps) =
+        loop accum blks getter ((ParsedPiece (Include n) pos):ps) =
             liftIO (tmplStore n) >>=
-            maybe (throwError $ TemplateNotFound n) 
+            maybe (throwError (TemplateNotFound n) pos) 
                   (\(Template c) -> (loop accum blks getter c) >>=
                                     (\a -> loop a blks getter ps))
-        loop accum blks getter ((Decl n exp):ps) = 
+        loop accum blks getter ((ParsedPiece (Decl n exp) pos):ps) = 
             (reduceExpression renderConfig exp getter) >>=
             (\v -> loop accum blks (combineBuckets (varBucket n (LitVal v)) getter) ps)
 
-        loop accum blks getter ((FuncPiece exp):ps) = 
+        loop accum blks getter ((ParsedPiece (FuncPiece exp) pos):ps) = 
             (reduceExpression renderConfig exp getter) >>= 
             (\r -> loop (accum <> (renderOutput renderConfig r)) blks getter ps)      
         
-        processFor getter varName content accum blks (List objs) = loopFor accum objs
-          where loopGetter o = combineBuckets (varBucket varName o) getter
+        processFor getter varName content accum blks objs = loopFor accum objs
+          where loopGetter o = combineBuckets (varBucket varName (LitVal o)) getter
                 loopFor accum [] = return accum
                 loopFor accum (o:os) = do
                       s <- loop accum blks (loopGetter o) content
                       loopFor s os
-        processFor _ varName _ _ _ _ = throwError $ StrapError varName
