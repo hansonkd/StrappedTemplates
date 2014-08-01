@@ -1,6 +1,7 @@
 module Text.Strapped.Render 
   ( combineBuckets
   , varBucket
+  , bucketLookup
   , render
   , defaultConfig
   ) where
@@ -8,6 +9,7 @@ module Text.Strapped.Render
 import Blaze.ByteString.Builder
 import Blaze.ByteString.Builder.Char.Utf8
 import Control.Monad
+import qualified Data.Map as M
 import Data.List (intersperse)
 import Data.Monoid ((<>), mempty, mconcat)
 import Control.Monad.Error
@@ -38,15 +40,21 @@ defaultConfig = RenderConfig (\_ -> return Nothing) id
 
 -- | If the first bucket fails, try the second.
 combineBuckets :: InputBucket m -> InputBucket m -> InputBucket m
-combineBuckets g1 g2 i = maybe (g2 i) Just (g1 i) 
+combineBuckets = (++) 
 
 -- | Basic bucket. Matches on string and return input. Returns Nothing for
 --   everything else.
 varBucket :: String -> Input m -> InputBucket m
-varBucket varName o v | v == varName = Just o
-                      | otherwise    = Nothing
+varBucket varName o = [M.fromList [(varName, o)]]
 
-getOrThrow v getter pos = maybe (throwError $ InputNotFound v pos) return (getter v)
+bucketLookup :: String -> InputBucket m -> Maybe (Input m)
+bucketLookup v [] = Nothing
+bucketLookup v (m:ms) = maybe (bucketLookup v ms) Just (M.lookup v m)
+
+bucketFromList :: [(String, Input m)] -> InputBucket m
+bucketFromList l = [M.fromList l]
+
+getOrThrow v getter pos = maybe (throwError $ InputNotFound v pos) return (bucketLookup v getter)
 
 reduceExpression :: Monad m => RenderConfig -> ParsedExpression -> InputBucket m -> ErrorT StrapError m Literal
 reduceExpression c (ParsedExpression exp pos) getter = convert exp

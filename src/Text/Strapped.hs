@@ -6,6 +6,7 @@ module Text.Strapped
     -- ** Controlling variables 
   , combineBuckets
   , varBucket
+  , bucketLookup
     -- * Parsing
   , parseTemplate
     -- * TemplateLoading

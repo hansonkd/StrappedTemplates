@@ -4,6 +4,7 @@ module Text.Strapped.Types where
 import Blaze.ByteString.Builder
 import Control.Monad.Error
 import Data.List (intersperse)
+import qualified Data.Map as M
 import Data.Monoid (mconcat)
 import Data.Text.Lazy (Text)
 import Data.Typeable
@@ -61,7 +62,7 @@ data Literal = forall a . (Typeable a, Renderable a) => LitDyn a
              | LitInteger Integer
              | LitDouble Double
              | LitBuilder Builder
-             | LitList [Literal]
+             | LitList ![Literal]
              | LitEmpty
 
 data StrapError = StrapError String  SourcePos | InputNotFound String  SourcePos | TemplateNotFound String  SourcePos
@@ -71,7 +72,7 @@ instance Error StrapError where
   noMsg    = StrapError "A Strap Error" (initialPos "empty")
   strMsg s = StrapError s (initialPos "empty")
 
-type InputBucket m = String -> Maybe (Input m)
+type InputBucket m = [M.Map String (Input m)]
 
 type TemplateStore = String -> IO (Maybe Template)
 
