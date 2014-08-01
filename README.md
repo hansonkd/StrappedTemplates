@@ -27,8 +27,8 @@ import Text.Strapped
 
 makeBucket :: Int -> InputBucket IO
 makeBucket i = bucket
-  where bucket "render_size" = Just $ LitVal $ LitInt i
-        bucket "is" = Just $ List $ map (LitVal . LitInt) [1..i]
+  where bucket "render_size" = Just $ LitInt i
+        bucket "is" = Just $ List $ map LitInt [1..i]
         bucket "ioTime" = Just $ Func (\_ -> (liftIO $ getCurrentTime) >>= (\c -> return $ LitText $ T.pack $ show c) )
         bucket _ = Nothing
 
@@ -48,22 +48,38 @@ Template Lanaguage Features
 ### Functions
 Strapped lets you build and pass functions in your monad context.
 
-A function takes a list of `Input m` and produces a Literal in an `ErrorT m` context.
+A function takes a list of `Literal` and produces a Literal in an `ErrorT m` context.
 
-```haskell 
+
+```haskell
+instance Renderable UTCTime where
+  renderOutput _ c = showToBuilder c
+
+instance Renderable NominalDiffTime where
+  renderOutput _ c = showToBuilder c
+
 bucket :: MonadIO m => InputBucket m
 bucket "ioTime" = Just $ Func (\_ -> (liftIO $ getCurrentTime) >>= (\c -> return $ packInput $ show c) )
+bucket "diffTime" = Just $ Func diffTime
 bucket _        = Nothing
+
+
+diffTime (LitList ((LitDyn a):(LitDyn b):_)) = do
+  case do {t1 <- cast a; t2 <- cast b; return (t1, t2)} of
+    Just (time1, time2) -> return $ LitDyn (diffUTCTime time1 time2)
+    Nothing -> return $ LitText $ T.pack "Only UTCTimes Please..."
 ```
 
 ```html
 <h1>@{ ioTime }<h1>
+Diff @{ diffTime [ioTime, ioTime]}
 ```
 
 Retults in:
 
 ```html
 <h1>2014-02-24 02:02:35.191664 UTC</h1>
+Diff -0.000004s
 ```
 
 ### For loops
@@ -72,7 +88,7 @@ For loops are easy to do:
 
 ```haskell 
 bucket :: MonadIO m => InputBucket m
-bucket "is" = Just $ List $ map (LitVal . LitInt) [1..5]
+bucket "is" = Just $ LitList $ map LitInt [1..5]
 bucket _    = Nothing
 ```
 

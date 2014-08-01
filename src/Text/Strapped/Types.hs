@@ -3,7 +3,9 @@ module Text.Strapped.Types where
 
 import Blaze.ByteString.Builder
 import Control.Monad.Error
-import Data.Text.Lazy
+import Data.List (intersperse)
+import Data.Monoid (mconcat)
+import Data.Text.Lazy (Text)
 import Data.Typeable
 import Text.Parsec.Pos
 
@@ -17,15 +19,27 @@ data Expression =
   IntegerExpression Integer |
   FloatExpression Double |
   StringExpression String |
-  ListExpression [Expression] |
-  Multipart [Expression]
-  deriving (Show)
+  ListExpression [ParsedExpression] |
+  Multipart [ParsedExpression]
+
+instance Show Expression where
+  show (LookupExpression s) = s
+  show (IntegerExpression s) = show s
+  show (FloatExpression s) = show s
+  show (StringExpression s) = "\"" ++ s ++ "\""
+  show (ListExpression l) = "[" ++ (mconcat $ intersperse "," (map show l)) ++ "]"
+  show (Multipart l) = mconcat $ map show l
+
+data ParsedExpression = ParsedExpression Expression SourcePos
+
+instance Show ParsedExpression where
+  show (ParsedExpression exp _) = show exp
 
 data Piece = StaticPiece Output
            | BlockPiece String [ParsedPiece]
-           | ForPiece String Expression [ParsedPiece]
-           | FuncPiece Expression
-           | Decl String Expression
+           | ForPiece String ParsedExpression [ParsedPiece]
+           | FuncPiece ParsedExpression
+           | Decl String ParsedExpression
            | Include String
            | Inherits String [(String, [ParsedPiece])]
            deriving (Show)

@@ -8,12 +8,15 @@ module Text.Strapped.Render
 import Blaze.ByteString.Builder
 import Blaze.ByteString.Builder.Char.Utf8
 import Control.Monad
+import Data.List (intersperse)
 import Data.Monoid ((<>), mempty, mconcat)
 import Control.Monad.Error
 import Control.Monad.IO.Class
 import Data.Maybe (catMaybes)
 import qualified Data.Text.Lazy as T
 import Text.Strapped.Types
+import Text.Parsec.Pos
+
 
 instance Renderable Builder where
   renderOutput _ = id
@@ -24,7 +27,9 @@ instance Renderable Literal where
   renderOutput rc (LitInteger i) = fromShow i
   renderOutput rc (LitDouble i)  = fromShow i
   renderOutput _ (LitBuilder b)  = b
-  renderOutput rc (LitList l)    = mconcat $ map (renderOutput rc) l 
+  renderOutput rc (LitList l)    = (fromChar '[') <> 
+                                   (mconcat $ intersperse (fromChar ',') (map (renderOutput rc) l)) <> 
+                                   (fromChar ']')
   renderOutput rc (LitDyn r) = renderOutput rc r
   
 -- | Default render configuration. No text escaping.
@@ -43,20 +48,21 @@ varBucket varName o v | v == varName = Just o
 
 getOrThrow v getter pos = maybe (throwError $ InputNotFound v pos) return (getter v)
 
-reduceExpression :: Monad m => RenderConfig -> Expression -> InputBucket m -> ErrorT StrapError m Literal
-reduceExpression c exp getter = convert exp
-  where convert (IntegerExpression i) = return $ LitInteger i
+reduceExpression :: Monad m => RenderConfig -> ParsedExpression -> InputBucket m -> ErrorT StrapError m Literal
+reduceExpression c (ParsedExpression exp pos) getter = convert exp
+  where convertMore exp = reduceExpression c exp getter
+        convert (IntegerExpression i) = return $ LitInteger i
         convert (FloatExpression i) = return $ LitDouble i
         convert (StringExpression s) = return $ LitText (T.pack s)
         convert (Multipart []) = return $ LitEmpty
-        convert (Multipart (f:[])) = convert f
-        convert (Multipart ((LookupExpression func):args)) = do
+        convert (Multipart (f:[])) = convertMore f
+        convert (Multipart ((ParsedExpression (LookupExpression func) ipos):args)) = do
           val <- getOrThrow func getter pos
           case val of
             (Func f) -> convert (Multipart args) >>= f
-            _ -> throwError $ StrapError (func ++ " is not a function but has args: " ++ (show args)) pos
-        convert (Multipart v) = throwError $ StrapError ((show v) ++ " cannot be reduced.") pos
-        convert (ListExpression args) = mapM convert args >>= (return . LitList) 
+            _ -> throwError $ StrapError ("`" ++ func ++ "` is not a function but has args: " ++ (show args)) ipos
+        convert (Multipart v) = throwError $ StrapError ("`" ++ (show v) ++ "` cannot be reduced.") pos
+        convert (ListExpression args) = mapM convertMore args >>= (return . LitList) 
         convert (LookupExpression f) = do
             val <- getOrThrow f getter pos
             inputToLiteral val
@@ -70,7 +76,7 @@ reduceExpression c exp getter = convert exp
 render :: MonadIO m => RenderConfig -> InputBucket m -> String -> m (Either StrapError Output)
 render renderConfig getter' tmplName = do
       tmpl <- liftIO $ tmplStore tmplName
-      maybe (return $ Left $ TemplateNotFound tmplName) 
+      maybe (return $ Left $ TemplateNotFound tmplName (initialPos tmplName)) 
             (\(Template c) -> runErrorT $ loop mempty mempty getter' c) 
             tmpl
   where tmplStore = templateStore renderConfig
@@ -86,15 +92,15 @@ render renderConfig getter' tmplName = do
           var <- reduceExpression renderConfig exp getter
           case var of 
             LitList l -> (processFor getter n c accum blks l) >>= (\a -> loop a blks getter ps)
-            _ -> throwError $ StrapError (show exp ++ " is not a LitList") pos
+            _ -> throwError $ StrapError ("`" ++ show exp ++ "` is not a LitList") pos
         loop accum blks getter ((ParsedPiece (Inherits n b) pos):ps) =
             liftIO (tmplStore n) >>=
-            maybe (throwError (TemplateNotFound n) pos)
+            maybe (throwError (TemplateNotFound n pos))
                   (\(Template c) -> (loop accum (b ++ blks) getter c) >>= 
                                     (\a -> loop a blks getter ps))
         loop accum blks getter ((ParsedPiece (Include n) pos):ps) =
             liftIO (tmplStore n) >>=
-            maybe (throwError (TemplateNotFound n) pos) 
+            maybe (throwError (TemplateNotFound n pos)) 
                   (\(Template c) -> (loop accum blks getter c) >>=
                                     (\a -> loop a blks getter ps))
         loop accum blks getter ((ParsedPiece (Decl n exp) pos):ps) = 

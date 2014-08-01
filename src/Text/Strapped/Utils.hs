@@ -4,7 +4,6 @@ import           Blaze.ByteString.Builder
 import           Blaze.ByteString.Builder.Char.Utf8
 import           Control.Monad
 import           Data.List hiding (find)
-import qualified Data.Text.Lazy as T
 import           Text.Strapped.Types
 import           Text.Strapped.Parser
 
