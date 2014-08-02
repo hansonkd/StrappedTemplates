@@ -16,10 +16,10 @@ import Text.Strapped.Types
 
 
 tagStart :: GenParser Char st String
-tagStart = string "{@"
+tagStart = string "{$"
 
 tagEnd :: GenParser Char st String
-tagEnd = string "@}"
+tagEnd = string "$}"
 
 wordString :: GenParser Char st String
 wordString = many1 $ oneOf "_" <|> alphaNum
@@ -113,7 +113,7 @@ parseFunc ::  GenParser Char st ParsedPiece
 parseFunc = parserFunc <?> "Call tag"
   where parserFunc = do
           pos <- getPosition
-          string "@{" >> spaces
+          string "${" >> spaces
           exp <- parseExpression (try $ spaces >> string "}")
           return $ ParsedPiece (FuncPiece exp) pos
 
@@ -153,7 +153,7 @@ parseStatic :: GenParser Char st ParsedPiece
 parseStatic = do
   pos <- getPosition
   c <- anyChar
-  s <- manyTill anyChar (peekChar '{' <|> peekChar '@' <|> eof)
+  s <- manyTill anyChar (peekChar '{' <|> peekChar '$' <|> eof)
   return $ ParsedPiece (StaticPiece (B.fromString $ c:s)) pos
 
 parseNonStatic :: GenParser Char st ParsedPiece

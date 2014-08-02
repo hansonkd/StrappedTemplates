@@ -1,7 +1,7 @@
 Base Template
 
-{@ block body @}
+{$ block body $}
 Default Body
-{@ endblock @}
+{$ endblock $}
 
-{@ include includes/includes.strp @}
+{$ include includes/includes.strp $}
