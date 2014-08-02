@@ -2,7 +2,7 @@
 module Text.Strapped.Types where
 
 import Blaze.ByteString.Builder
-import Control.Monad.Error
+import Control.Monad.Except
 import Data.List (intersperse)
 import qualified Data.Map as M
 import Data.Monoid (mconcat)
@@ -13,7 +13,7 @@ import Text.Parsec.Pos
 type Output = Builder
 
 instance Show Builder where
-  show _ = "blah"
+  show = show . toByteString
 
 data Expression = 
   LookupExpression String |
@@ -53,7 +53,7 @@ class Renderable a where
   
 data Input m = forall a . (Renderable a) => RenderVal a
              | List [Input m]
-             | Func  (Literal -> ErrorT StrapError m Literal)
+             | Func  (Literal -> ExceptT StrapError m Literal)
              | LitVal Literal
 
 data Literal = forall a . (Typeable a, Renderable a) => LitDyn a
@@ -65,12 +65,10 @@ data Literal = forall a . (Typeable a, Renderable a) => LitDyn a
              | LitList ![Literal]
              | LitEmpty
 
-data StrapError = StrapError String  SourcePos | InputNotFound String  SourcePos | TemplateNotFound String  SourcePos
+data StrapError = StrapError String  SourcePos 
+                | InputNotFound String  SourcePos 
+                | TemplateNotFound String  SourcePos
   deriving (Show)
-  
-instance Error StrapError where
-  noMsg    = StrapError "A Strap Error" (initialPos "empty")
-  strMsg s = StrapError s (initialPos "empty")
 
 type InputBucket m = [M.Map String (Input m)]
 

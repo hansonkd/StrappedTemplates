@@ -2,6 +2,7 @@ module Text.Strapped.Render
   ( combineBuckets
   , varBucket
   , bucketLookup
+  , bucketFromList
   , render
   , defaultConfig
   ) where
@@ -12,7 +13,7 @@ import Control.Monad
 import qualified Data.Map as M
 import Data.List (intersperse)
 import Data.Monoid ((<>), mempty, mconcat)
-import Control.Monad.Error
+import Control.Monad.Except
 import Control.Monad.IO.Class
 import Data.Maybe (catMaybes)
 import qualified Data.Text.Lazy as T
@@ -56,7 +57,7 @@ bucketFromList l = [M.fromList l]
 
 getOrThrow v getter pos = maybe (throwError $ InputNotFound v pos) return (bucketLookup v getter)
 
-reduceExpression :: Monad m => RenderConfig -> ParsedExpression -> InputBucket m -> ErrorT StrapError m Literal
+reduceExpression :: Monad m => RenderConfig -> ParsedExpression -> InputBucket m -> ExceptT StrapError m Literal
 reduceExpression c (ParsedExpression exp pos) getter = convert exp
   where convertMore exp = reduceExpression c exp getter
         convert (IntegerExpression i) = return $ LitInteger i
@@ -85,7 +86,7 @@ render :: MonadIO m => RenderConfig -> InputBucket m -> String -> m (Either Stra
 render renderConfig getter' tmplName = do
       tmpl <- liftIO $ tmplStore tmplName
       maybe (return $ Left $ TemplateNotFound tmplName (initialPos tmplName)) 
-            (\(Template c) -> runErrorT $ loop mempty mempty getter' c) 
+            (\(Template c) -> runExceptT $ loop mempty mempty getter' c) 
             tmpl
   where tmplStore = templateStore renderConfig
         loop accum _ _ [] = return accum
