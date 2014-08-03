@@ -19,7 +19,7 @@ Strapped renders variables to text with this tag:
 
 Strapped includes these tag blocks:
 {$ raw $}
- `{$ inherits _ $}` {$ let _ = _ $}` `{$ includes _ $}` `{$ for _ in _ $}{$ endfor $}` `{$ if _ $}{$ endif $}` `{% block _ $}{$ endblock $}` `{$ comment $}{$ endcomment $}` `{$ raw $}{$ endraw $}{$ endraw $}`
+ `{$ inherits _ $}` `{$ let _ = _ $}` `{$ includes _ $}` `{$ for _ in _ $}{$ endfor $}` `{$ if _ $}{$ endif $}` `{% block _ $}{$ endblock $}` `{$ comment $}{$ endcomment $}` `{$ raw $}{$ endraw $}{$ endraw $}`
 
 ### Expressions
 Strapped gives you a limited number of expressions you can define in your template. Improving this is a core focus of future releases.
