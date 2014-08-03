@@ -11,8 +11,7 @@ import Text.Strapped
 
 makeBucket :: Integer -> InputBucket IO
 makeBucket i = bucketFromList 
-      [ ("is", List $ map (LitVal . LitInteger) [1..i])
-      , ("fromFile", Func readFileFunc)
+      [ ("fromFile", Func readFileFunc)
       , ("linesFromFile", Func readLines)
       ]
 
@@ -24,7 +23,7 @@ readLines _ = return LitEmpty
 
 main :: IO ()
 main = do
-  tmpls <- templateStoreFromDirectory "benchmarks/strapped_templates" ".strp"
+  tmpls <- templateStoreFromDirectory "examples/templates" ".strp"
   case tmpls of
     Left err -> print err
     Right store -> do

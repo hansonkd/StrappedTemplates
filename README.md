@@ -6,7 +6,11 @@ General Purpose Templates in Haskell.
 Objective
 =========
 
-The objective of this project is to build an easy-to-use, flexible, general purpose, performant templating language. Strapped is general purpose and is not necessarily geared towards HTML. For example, this README and cabal file is written in Strapped (see `benchmarks/strapped_templates/README.strp` and `examples/make_readme.hs`)
+The objective of this project is to build an easy-to-use, flexible, general purpose, performant templating language. 
+
+Strapped isn't necessarily geared towards HTML. For example, this README and cabal file is written in Strapped (see `examples/templates/README.strp` and `examples/make_readme.hs`).
+
+There is still a lot of work to do. I want to simplify the types of inputs and function variables since as of now you have to pack primitives inside if Literals and then pattern match them. 
 
 Quick Start
 ===========
@@ -17,7 +21,7 @@ Strapped renders variables to text with this tag:
 `${ _ }`
 
 
-Strapped includes these tag blocks:
+Strapped includes these tag blocks to control flow:
 
  `{$ inherits _ $}` `{$ let _ = _ $}` `{$ includes _ $}` `{$ for _ in _ $}{$ endfor $}` `{$ if _ $}{$ endif $}` `{% block _ $}{$ endblock $}` `{$ comment $}{$ endcomment $}` `{$ raw $}{$ endraw $}`
 
@@ -31,6 +35,37 @@ Currently expressions include Bools, Lists, 0 arity functions, single arity func
 ${ takesAList ["string", 1, 1.0, [True, zeroArityFunc, lookupVar], (someFunc False)] }
 ```
 
+
+### Example
+
+Here is an example of the tags being used together:
+
+```html
+{$ inherits base.strp $}
+
+{$ isblock body $}
+
+An IO function to find the current time: ${ ioTime }
+
+{$ if is_truthy $}
+    {$ inherits base.strp $}
+    {$ isblock body $}
+        Any block level can inherit from another template and override blocks.
+    {$ endisblock $}
+{$ else $}
+    Don't show me.
+{$ endif $}
+
+Taken from an includes:
+{$ include includes/includes.strp $}
+
+Lets count...
+{$ for i in is $}
+    ${ i }
+{$ endfor $}
+
+{$ endisblock $}
+```
 
 ### Rendering
 
@@ -59,7 +94,7 @@ makeBucket i = bucketFromList
 
 main :: IO ()
 main = do
-  tmpls <- templateStoreFromDirectory "../benchmarks/strapped_templates" ".strp"
+  tmpls <- templateStoreFromDirectory "examples/templates" ".strp"
   case tmpls of
     Left err -> print err
     Right store -> do
@@ -130,7 +165,7 @@ bucket = bucketFromList [
 
 
 
-### Control Parsing
+### Parsing Control
 
 You can use the `{$ raw $}` tag to prevent the parser from parsing a part of the file.
 
@@ -243,6 +278,6 @@ Here is an example of using inheritence at different levels:
 Speed
 =====
 
-Strapped preloads and tokenizes your templates before render time. This results in overall good performance. It is about as fast as Blaze-Html in normal linear templates. Agravating the garbage collection and doing large loops inside loops slows it down about 2x slower than Blaze-Html, which is still pretty fast. It is significantly (orders of magnitude) faster than interpreted templates like Django, Interpreted-Heist and Hastache. The part that seems to slow it down the most is variable lookup.
+Strapped preloads and tokenizes your templates before render time. This results in overall good performance. It is about as fast as Blaze-Html in normal linear templates. Agravating the garbage collection and doing large loops inside loops slows it down about 2x slower than Blaze-Html, which is still pretty fast. It is significantly (orders of magnitude) faster than interpreted templates like Django, Interpreted-Heist and Hastache. One of the biggest areas I found that impacted performance was the `InputBucket m` type. Originally I had an `InputBucket m` simply be a function, but I found that excluding highly nested loops, the list of maps works faster in general.
 
 I haven't spent spent much time optimizing so there is still room for improvement. Feel free to run the benchmarks or optimize them more.

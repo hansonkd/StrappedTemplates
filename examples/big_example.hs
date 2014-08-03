@@ -42,7 +42,7 @@ makeBucket i t = bucketFromList [
 main :: IO ()
 main = do 
   (return "blah") >>= (\r -> return ["what", r]) >>= print
-  tmpls <- templateStoreFromDirectory "benchmarks/strapped_templates" ".strp"
+  tmpls <- templateStoreFromDirectory "examples/templates" ".strp"
   time <-getCurrentTime
   case tmpls of
     Left err -> print err

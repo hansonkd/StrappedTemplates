@@ -4,4 +4,4 @@ Base Template
 Default Body
 {$ endblock $}
 
-{$ include includes/includes.strp $}
+{$ include includes/footer.strp $}

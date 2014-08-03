@@ -1,0 +1,24 @@
+{$ inherits base.strp $}
+
+{$ isblock body $}
+
+An IO function to find the current time: ${ ioTime }
+
+{$ if is_truthy $}
+    {$ inherits base.strp $}
+    {$ isblock body $}
+        Any block level can inherit from another template and override blocks.
+    {$ endisblock $}
+{$ else $}
+    Don't show me.
+{$ endif $}
+
+Taken from an includes:
+{$ include includes/includes.strp $}
+
+Lets count...
+{$ for i in is $}
+    ${ i }
+{$ endfor $}
+
+{$ endisblock $}

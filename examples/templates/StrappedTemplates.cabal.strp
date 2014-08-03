@@ -16,7 +16,7 @@ description:
   >  ${ line }
   {$ endfor $}.
   @
-  {$ for line in (linesFromFile "benchmarks/strapped_templates/base_simple.strp") $}
+  {$ for line in (linesFromFile "examples/templates/base_simple.strp") $}
   &#160;${ line }
   {$ endfor $}@
 
