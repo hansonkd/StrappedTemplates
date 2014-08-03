@@ -6,7 +6,7 @@ General Purpose Templates in Haskell.
 Objective
 =========
 
-The objective of this project is to build an easy-to-use, flexible, general purpose, performant templating language. Strapped is general purpose and is not necessarily geared towards HTML. For example, this README and cabal file is written in Strapp (see `benchmarks/strapped_templates/README.strp` and `examples/make_readme.hs`)
+The objective of this project is to build an easy-to-use, flexible, general purpose, performant templating language. Strapped is general purpose and is not necessarily geared towards HTML. For example, this README and cabal file is written in Strapped (see `benchmarks/strapped_templates/README.strp` and `examples/make_readme.hs`)
 
 Quick Start
 ===========
@@ -70,12 +70,12 @@ diffTime (LitList ((LitDyn a):(LitDyn b):_)) = do
     Nothing -> return $ LitText $ T.pack "Only UTCTimes Please..."
 ```
 
-```html
 
+```html
 <h1>${ ioTime }<h1>
 Diff ${ diffTime [ioTime, ioTime]}
-
 ```
+
 
 Retults in:
 
@@ -95,41 +95,43 @@ bucket = bucketFromList [
         ]
 ```
 
-```html
 
+```html
 <ul>
   {$ for i in is $}
   <li> ${ i } </li>
   {$ endfor $}
 </ul>
-
 ```
+
+
 
 ### Control Parsing
 
 You can use the `{$ raw $}` tag to prevent the parser from parsing a part of the file.
 
-```html
 
-{$ raw $}${ thisWontBeEvaluated }
-{$ endraw $}
+```html
+{$ raw $} ${ thisWontBeEvaluated } 
 ```
+{$ endraw $}
 
 Or you can use the `{$ comment $}` tag to skip over that part of the file altogether.
 
+
 ```html
-
 {$ comment $} This wont show. ${ thisWontShowAtAll } neither will this. {$ endcomment $}
-
 ```
+
+
 
 
 ### In template declarations
 
 At the start of every template, block, or forloop, you can define template variables with a let tag.
 
-```html
 
+```html
 {$ let time = ioTime $}
 
 ${ time }
@@ -140,8 +142,9 @@ ${ time }
   <li> ${ val } </li>
   {$ endfor $}
 </ul>
-
 ```
+
+
 
 ### Includes
 
@@ -152,12 +155,12 @@ includes.strp
 Other Template
 ```
 
-```html
 
+```html
 This is a template that calls another.
 The other template: {$ include includes.strp $}
-
 ```
+
 
 Result:
 
@@ -171,30 +174,30 @@ The other template: Other Template
 
 Any block, forloop, or template can inherit from another template. This allows you to specify a base template with `block` tags that will get filled by content defined in `isblock`. If an `inherits` tag is encountered, only `isblock` tags will be allowed at that level. 
 
+
 base.strp
 ```html
-
 This is a base template
 ${ time }
 {$ block title $} Default Title {$ endblock $}
 {$ block body $} Default Body {$ endblock $}
-
 ```
 
-```html
 
+
+```html
 {$ let time = ioTime $}
 {$ inherits base.strp $}
 
 {$ isblock title $}Block title!!{$ endisblock $}
 {$ isblock title $}Block Body!!{$ endisblock $}
-
 ```
+
 
 Here is an example of using inheritence at different levels:
 
-```html
 
+```html
 {$ let time = ioTime $}
 
 {$ inherits base.strp $}
@@ -210,8 +213,8 @@ Here is an example of using inheritence at different levels:
     {$ endisblock $}
   {$ endfor $}
 {$ endisblock $}
-
 ```
+
 
 Speed
 =====
