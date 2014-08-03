@@ -6,7 +6,7 @@ General Purpose Templates in Haskell.
 Objective
 =========
 
-The objective of this project is to build an easy-to-use, flexible, general purpose, performant templating language.
+The objective of this project is to build an easy-to-use, flexible, general purpose, performant templating language. Strapped is general purpose and is not necessarily geared towards HTML. For example, this README and cabal file is written in Strapp (see `benchmarks/strapped_templates/README.strp` and `examples/make_readme.hs`)
 
 Quick Start
 ===========
@@ -21,13 +21,6 @@ The easiest way to create a template store is to use one of the built in functio
 
 ```haskell
 ${ fromFile "examples/base_example.hs" }
-```
-
-linesFromFile
-```haskell
-{$ for line in (linesFromFile "examples/base_example.hs") $}
-> ${ line }
-{$ endfor $}
 ```
 
 Template Lanaguage Features

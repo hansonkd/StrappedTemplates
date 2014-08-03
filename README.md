@@ -6,14 +6,16 @@ General Purpose Templates in Haskell.
 Objective
 =========
 
-The objective of this project is to build an easy-to-use, flexible, general purpose, performant templating language.
+The objective of this project is to build an easy-to-use, flexible, general purpose, performant templating language. Strapped is general purpose and is not necessarily geared towards HTML. For example, this README and cabal file is written in Strapp (see `benchmarks/strapped_templates/README.strp` and `examples/make_readme.hs`)
 
 Quick Start
 ===========
 
 Strapped templates need two things to render. A `TemplateStore` and an `InputBucket m`. 
 
-`TemplateStore` and `InputBucket m` are both just functions that take a String and returns templates or inputs.
+`TemplateStore` is just function that take a String and returns a template.
+
+`InputBucket m` is a list of maps that get iterated through to find variables.
 
 The easiest way to create a template store is to use one of the built in functions. The `templateStoreFromDirectory` loads and parses the templates upfront. The TemplateStore datatype is flexible enough (executes in `IO`) that you could add a dynamically loading TemplateStore if you wanted.
 
@@ -25,12 +27,11 @@ import Data.Time
 
 import Text.Strapped
 
-makeBucket :: Int -> InputBucket IO
-makeBucket i = bucket
-  where bucket "render_size" = Just $ LitInt i
-        bucket "is" = Just $ List $ map LitInt [1..i]
-        bucket "ioTime" = Just $ Func (\_ -> (liftIO $ getCurrentTime) >>= (\c -> return $ LitText $ T.pack $ show c) )
-        bucket _ = Nothing
+makeBucket :: Integer -> InputBucket IO
+makeBucket i = bucketFromList 
+      [ ("is", List $ map (LitVal . LitInteger) [1..i])
+      , ("ioTime", Func (\_ -> (liftIO $ getCurrentTime) >>= (\c -> return $ LitText $ T.pack $ show c)))
+      ]
 
 main :: IO ()
 main = do
@@ -38,14 +39,14 @@ main = do
   case tmpls of
     Left err -> print err
     Right store -> do
-      rendered <- render (defaultConfig {templateStore = store}) (makeBucket 2) "big.strp"
+      rendered <- render (defaultConfig {templateStore = store}) (makeBucket 2) "example.strp"
       either (print) (print . B.toByteString) rendered
 ```
 
 Template Lanaguage Features
 ===========================
 
-### Functions 
+### Functions
 Strapped lets you build and pass functions in your monad context.
 
 A function takes a list of `Literal` and produces a Literal in an `ErrorT m` context.
@@ -58,11 +59,10 @@ instance Renderable UTCTime where
 instance Renderable NominalDiffTime where
   renderOutput _ c = showToBuilder c
 
-bucket :: MonadIO m => InputBucket m
-bucket "ioTime" = Just $ Func (\_ -> (liftIO $ getCurrentTime) >>= (\c -> return $ packInput $ show c) )
-bucket "diffTime" = Just $ Func diffTime
-bucket _        = Nothing
-
+bucket = bucketFromList [
+          ("ioTime", Func (\_ -> (liftIO $ getCurrentTime) >>= (\c -> return $ LitDyn $ c) )),
+          ("diffTime", Func diffTime),
+        ]
 
 diffTime (LitList ((LitDyn a):(LitDyn b):_)) = do
   case do {t1 <- cast a; t2 <- cast b; return (t1, t2)} of
@@ -71,8 +71,10 @@ diffTime (LitList ((LitDyn a):(LitDyn b):_)) = do
 ```
 
 ```html
+
 <h1>${ ioTime }<h1>
 Diff ${ diffTime [ioTime, ioTime]}
+
 ```
 
 Retults in:
@@ -88,23 +90,46 @@ For loops are easy to do:
 
 ```haskell 
 bucket :: MonadIO m => InputBucket m
-bucket "is" = Just $ LitList $ map LitInt [1..5]
-bucket _    = Nothing
+bucket = bucketFromList [
+          ("is", List $ map (LitVal . LitInteger) [1..5]),
+        ]
 ```
 
 ```html
+
 <ul>
   {$ for i in is $}
   <li> ${ i } </li>
   {$ endfor $}
 </ul>
+
 ```
+
+### Control Parsing
+
+You can use the `{$ raw $}` tag to prevent the parser from parsing a part of the file.
+
+```html
+
+{$ raw $}${ thisWontBeEvaluated }
+{$ endraw $}
+```
+
+Or you can use the `{$ comment $}` tag to skip over that part of the file altogether.
+
+```html
+
+{$ comment $} This wont show. ${ thisWontShowAtAll } neither will this. {$ endcomment $}
+
+```
+
 
 ### In template declarations
 
 At the start of every template, block, or forloop, you can define template variables with a let tag.
 
 ```html
+
 {$ let time = ioTime $}
 
 ${ time }
@@ -115,6 +140,7 @@ ${ time }
   <li> ${ val } </li>
   {$ endfor $}
 </ul>
+
 ```
 
 ### Includes
@@ -127,8 +153,10 @@ Other Template
 ```
 
 ```html
+
 This is a template that calls another.
 The other template: {$ include includes.strp $}
+
 ```
 
 Result:
@@ -145,23 +173,28 @@ Any block, forloop, or template can inherit from another template. This allows y
 
 base.strp
 ```html
+
 This is a base template
 ${ time }
 {$ block title $} Default Title {$ endblock $}
 {$ block body $} Default Body {$ endblock $}
+
 ```
 
 ```html
+
 {$ let time = ioTime $}
 {$ inherits base.strp $}
 
 {$ isblock title $}Block title!!{$ endisblock $}
 {$ isblock title $}Block Body!!{$ endisblock $}
+
 ```
 
 Here is an example of using inheritence at different levels:
 
 ```html
+
 {$ let time = ioTime $}
 
 {$ inherits base.strp $}
@@ -177,11 +210,12 @@ Here is an example of using inheritence at different levels:
     {$ endisblock $}
   {$ endfor $}
 {$ endisblock $}
+
 ```
 
 Speed
 =====
 
-Strapped preloads and tokenizes your templates before render time. This results in overall good performance. It is about as fast as Blaze-Html in normal linear templates. Agravating the garbage collection and doing large loops inside loops slows it down about 2x slower than Blaze-Html, which is still pretty fast. It is significantly (orders of magnitude) faster than interpreted templates like Django, Interpreted-Heist and Hastache.
+Strapped preloads and tokenizes your templates before render time. This results in overall good performance. It is about as fast as Blaze-Html in normal linear templates. Agravating the garbage collection and doing large loops inside loops slows it down about 2x slower than Blaze-Html, which is still pretty fast. It is significantly (orders of magnitude) faster than interpreted templates like Django, Interpreted-Heist and Hastache. The part that seems to slow it down the most is variable lookup.
 
 I haven't spent spent much time optimizing so there is still room for improvement. Feel free to run the benchmarks or optimize them more.

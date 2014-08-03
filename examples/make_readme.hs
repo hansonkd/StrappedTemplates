@@ -27,4 +27,6 @@ main = do
     Left err -> print err
     Right store -> do
       rendered <- render (defaultConfig {templateStore = store}) (makeBucket 2) "README.strp"
-      either (print) (BS.putStr . B.toByteString) rendered
+      either (print) (BS.writeFile "README.md" . B.toByteString) rendered
+      cabalrendered <- render (defaultConfig {templateStore = store}) (makeBucket 2) "StrappedTemplates.cabal.strp"
+      either (print) (BS.writeFile "StrappedTemplates.cabal" . B.toByteString) cabalrendered
