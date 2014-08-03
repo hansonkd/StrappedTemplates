@@ -45,7 +45,7 @@ main = do
 Template Lanaguage Features
 ===========================
 
-### Functions
+### Functions 
 Strapped lets you build and pass functions in your monad context.
 
 A function takes a list of `Literal` and produces a Literal in an `ErrorT m` context.
