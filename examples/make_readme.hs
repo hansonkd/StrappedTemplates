@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 import Control.Monad.IO.Class
 import qualified Blaze.ByteString.Builder as B
 import qualified Data.ByteString as BS
@@ -17,7 +19,7 @@ makeBucket i = bucketFromList
 readFileFunc (LitText t) = (liftIO $ T.readFile (T.unpack t)) >>= (return . LitText)
 readFileFunc _ = return LitEmpty
 
-readLines (LitText t) = (liftIO $ T.readFile (T.unpack t)) >>= (\t -> return $ LitList $ map (LitText) (T.lines t))
+readLines (LitText t) = (liftIO $ T.readFile (T.unpack t)) >>= (\t -> return $ LitList $ map (LitText . (T.replace "{" "&#x7b;") . (T.replace "}" "&#x7d;"))  (T.lines t))
 readLines _ = return LitEmpty
 
 main :: IO ()
