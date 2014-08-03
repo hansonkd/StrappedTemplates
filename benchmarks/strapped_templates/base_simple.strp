@@ -1,13 +1,9 @@
 ${ ioTime }
 
-{$ if True $}
+{$ if is_truthy $}
 positve
 {$ else $}
 Dont show
-{$ endif $}
-
-{$ if False $}
-negative
 {$ endif $}
 
 {$ for i in is $}

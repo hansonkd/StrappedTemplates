@@ -22,6 +22,7 @@ description:
   >  makeBucket :: Integer -> InputBucket IO
   >  makeBucket i = bucketFromList 
   >        [ ("is", List $ map (LitVal . LitInteger) [1..i])
+  >        , ("is_truthy", LitVal $ LitInteger i)
   >        , ("ioTime", Func (\_ -> (liftIO $ getCurrentTime) >>= (\c -> return $ LitText $ T.pack $ show c)))
   >        ]
   >  
@@ -37,14 +38,10 @@ description:
   @
   &#160;$&#x7b; ioTime &#x7d;
   &#160;
-  &#160;&#x7b;$ if True $&#x7d;
+  &#160;&#x7b;$ if is_truthy $&#x7d;
   &#160;positve
   &#160;&#x7b;$ else $&#x7d;
   &#160;Dont show
-  &#160;&#x7b;$ endif $&#x7d;
-  &#160;
-  &#160;&#x7b;$ if False $&#x7d;
-  &#160;negative
   &#160;&#x7b;$ endif $&#x7d;
   &#160;
   &#160;&#x7b;$ for i in is $&#x7d;

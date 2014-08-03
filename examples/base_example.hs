@@ -8,6 +8,7 @@ import Text.Strapped
 makeBucket :: Integer -> InputBucket IO
 makeBucket i = bucketFromList 
       [ ("is", List $ map (LitVal . LitInteger) [1..i])
+      , ("is_truthy", LitVal $ LitInteger i)
       , ("ioTime", Func (\_ -> (liftIO $ getCurrentTime) >>= (\c -> return $ LitText $ T.pack $ show c)))
       ]
 

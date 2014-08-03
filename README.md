@@ -24,7 +24,7 @@ Strapped includes these tag blocks:
 ### Expressions
 Strapped gives you a limited number of expressions you can define in your template. Improving this is a core focus of future releases.
 
-Currently expressions include Bools, Lists, 0 arity functions, 1 arity functions, strings, ints, floats. 
+Currently expressions include Bools, Lists, 0 arity functions, single arity functions, strings, ints, floats. 
 
 
 ```
@@ -53,6 +53,7 @@ import Text.Strapped
 makeBucket :: Integer -> InputBucket IO
 makeBucket i = bucketFromList 
       [ ("is", List $ map (LitVal . LitInteger) [1..i])
+      , ("is_truthy", LitVal $ LitInteger i)
       , ("ioTime", Func (\_ -> (liftIO $ getCurrentTime) >>= (\c -> return $ LitText $ T.pack $ show c)))
       ]
 
