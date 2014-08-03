@@ -71,8 +71,8 @@ diffTime (LitList ((LitDyn a):(LitDyn b):_)) = do
 ```
 
 ```html
-<h1>@{ ioTime }<h1>
-Diff @{ diffTime [ioTime, ioTime]}
+<h1>${ ioTime }<h1>
+Diff ${ diffTime [ioTime, ioTime]}
 ```
 
 Retults in:
@@ -94,9 +94,9 @@ bucket _    = Nothing
 
 ```html
 <ul>
-  {@ for i in is @}
-  <li> @{ i } </li>
-  {@ endfor @}
+  {$ for i in is $}
+  <li> ${ i } </li>
+  {$ endfor $}
 </ul>
 ```
 
@@ -105,15 +105,15 @@ bucket _    = Nothing
 At the start of every template, block, or forloop, you can define template variables with a let tag.
 
 ```html
-{@ let time = ioTime @}
+{$ let time = ioTime $}
 
-@{ time }
+${ time }
 
 <ul>
-  {@ for i in is @}
-  {@ let val = someFunc i @}
-  <li> @{ val } </li>
-  {@ endfor @}
+  {$ for i in is $}
+  {$ let val = someFunc i $}
+  <li> ${ val } </li>
+  {$ endfor $}
 </ul>
 ```
 
@@ -128,7 +128,7 @@ Other Template
 
 ```html
 This is a template that calls another.
-The other template: {@ include includes.strp @}
+The other template: {$ include includes.strp $}
 ```
 
 Result:
@@ -146,42 +146,42 @@ Any block, forloop, or template can inherit from another template. This allows y
 base.strp
 ```html
 This is a base template
-@{ time }
-{@ block title @} Default Title {@ endblock @}
-{@ block body @} Default Body {@ endblock @}
+${ time }
+{$ block title $} Default Title {$ endblock $}
+{$ block body $} Default Body {$ endblock $}
 ```
 
 ```html
-{@ let time = ioTime @}
-{@ inherits base.strp @}
+{$ let time = ioTime $}
+{$ inherits base.strp $}
 
-{@ isblock title @}Block title!!{@ endisblock @}
-{@ isblock title @}Block Body!!{@ endisblock @}
+{$ isblock title $}Block title!!{$ endisblock $}
+{$ isblock title $}Block Body!!{$ endisblock $}
 ```
 
 Here is an example of using inheritence at different levels:
 
 ```html
-{@ let time = ioTime @}
+{$ let time = ioTime $}
 
-{@ inherits base.strp @}
+{$ inherits base.strp $}
 
-{@ isblock title @}Outside of loop{@ endisblock @}
+{$ isblock title $}Outside of loop{$ endisblock $}
 
-{@ isblock body @}
-  {@ for i in is @}
-    {@ inherits base.strp @}
-    {@ isblock title @}Inside loop{@ endisblock @}
-    {@ isblock body @}
-      Called from for loop @{ i }
-    {@ endisblock @}
-  {@ endfor @}
-{@ endisblock @}
+{$ isblock body $}
+  {$ for i in is $}
+    {$ inherits base.strp $}
+    {$ isblock title $}Inside loop{$ endisblock $}
+    {$ isblock body $}
+      Called from for loop ${ i }
+    {$ endisblock $}
+  {$ endfor $}
+{$ endisblock $}
 ```
 
 Speed
 =====
 
-Strapped preloads and tokenizes your templates before render time. This results in overall good performance. It is about as fast as Blaze-Html in normal linear templates. Agravating the garbage collection and doing large loops inside loops slows it down about 2x slower than Blaze-Html, which is still pretty fast. It is significantly (orders of magnitude) faster than interpreted templates like Django, Interpreted-Heist and Hastache and up to 2x as fast as Mako compiled python templates.
+Strapped preloads and tokenizes your templates before render time. This results in overall good performance. It is about as fast as Blaze-Html in normal linear templates. Agravating the garbage collection and doing large loops inside loops slows it down about 2x slower than Blaze-Html, which is still pretty fast. It is significantly (orders of magnitude) faster than interpreted templates like Django, Interpreted-Heist and Hastache.
 
 I haven't spent spent much time optimizing so there is still room for improvement. Feel free to run the benchmarks or optimize them more.

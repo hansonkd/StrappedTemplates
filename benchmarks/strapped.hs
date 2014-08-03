@@ -9,9 +9,7 @@ import Text.ParserCombinators.Parsec
 import Data.Time
 
 makeBucket :: Integer -> InputBucket IO
-makeBucket i = bucket
-  where bucket "is" = Just $ List $ map (LitVal . LitInteger) [1..i]
-        bucket _ = Nothing
+makeBucket i = varBucket "is" $ List $ map (LitVal . LitInteger) [1..i]
 
 benchmarks st = map (\i -> bench (show i) $ whnfIO $ (liftM (fmap (B.toByteString)) $ render st (makeBucket i) "big-simple.strp")) [100,200..1000]
 

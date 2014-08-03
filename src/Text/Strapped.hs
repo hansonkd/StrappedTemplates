@@ -8,6 +8,7 @@ module Text.Strapped
   , varBucket
   , bucketLookup
   , bucketFromList
+  , emptyBucket
     -- * Parsing
   , parseTemplate
     -- * TemplateLoading

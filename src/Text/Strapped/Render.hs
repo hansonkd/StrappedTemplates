@@ -3,6 +3,7 @@ module Text.Strapped.Render
   , varBucket
   , bucketLookup
   , bucketFromList
+  , emptyBucket
   , render
   , defaultConfig
   ) where
@@ -47,6 +48,9 @@ combineBuckets = (++)
 --   everything else.
 varBucket :: String -> Input m -> InputBucket m
 varBucket varName o = [M.fromList [(varName, o)]]
+
+emptyBucket :: InputBucket m
+emptyBucket = []
 
 bucketLookup :: String -> InputBucket m -> Maybe (Input m)
 bucketLookup v [] = Nothing

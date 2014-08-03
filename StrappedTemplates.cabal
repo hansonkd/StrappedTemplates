@@ -1,11 +1,11 @@
 name:                StrappedTemplates
-version:             0.0.2.0
+version:             0.1.0.0
 synopsis:            General purpose templates in haskell
 homepage:            https://github.com/hansonkd/StrappedTemplates
 license:             BSD3
 license-file:        LICENSE
 author:              Kyle Hanson
-maintainer:          hanooter@gmail.com
+maintainer:          me@khanson.io
 category:            Text
 build-type:          Simple
 cabal-version:       >=1.8
