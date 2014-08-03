@@ -7,7 +7,6 @@ import Heist.Splices
 import Data.Monoid
 import qualified Data.Text as T
 import Control.Monad.Trans.Either
-import Text.XML.Expat.Tree as X
 import qualified Data.ByteString.Char8 as B
 import qualified Blaze.ByteString.Builder as B
 import Control.Monad

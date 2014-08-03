@@ -20,27 +20,7 @@ Strapped templates need two things to render. A `TemplateStore` and an `InputBuc
 The easiest way to create a template store is to use one of the built in functions. The `templateStoreFromDirectory` loads and parses the templates upfront. The TemplateStore datatype is flexible enough (executes in `IO`) that you could add a dynamically loading TemplateStore if you wanted.
 
 ```haskell
-import Control.Monad.IO.Class
-import qualified Blaze.ByteString.Builder as B
-import qualified Data.Text.Lazy as T
-import Data.Time
-
-import Text.Strapped
-
-makeBucket :: Integer -> InputBucket IO
-makeBucket i = bucketFromList 
-      [ ("is", List $ map (LitVal . LitInteger) [1..i])
-      , ("ioTime", Func (\_ -> (liftIO $ getCurrentTime) >>= (\c -> return $ LitText $ T.pack $ show c)))
-      ]
-
-main :: IO ()
-main = do
-  tmpls <- templateStoreFromDirectory "benchmarks/strapped_templates" ".strp"
-  case tmpls of
-    Left err -> print err
-    Right store -> do
-      rendered <- render (putStore store defaultConfig) (makeBucket 2) "base_simple.strp"
-      either (print) (print . B.toByteString) rendered
+${ fromFile "examples/base_example.hs" }
 ```
 
 Template Lanaguage Features
@@ -70,12 +50,12 @@ diffTime (LitList ((LitDyn a):(LitDyn b):_)) = do
     Nothing -> return $ LitText $ T.pack "Only UTCTimes Please..."
 ```
 
-
+{$ raw $}
 ```html
 <h1>${ ioTime }<h1>
 Diff ${ diffTime [ioTime, ioTime]}
 ```
-
+{$ endraw $}
 
 Retults in:
 
@@ -95,7 +75,7 @@ bucket = bucketFromList [
         ]
 ```
 
-
+{$ raw $}
 ```html
 <ul>
   {$ for i in is $}
@@ -103,26 +83,26 @@ bucket = bucketFromList [
   {$ endfor $}
 </ul>
 ```
-
+{$ endraw $}
 
 
 ### Control Parsing
 
-You can use the `{$ raw $}` tag to prevent the parser from parsing a part of the file.
+You can use the `{$ raw $}{$ raw $}{$ endraw $}` tag to prevent the parser from parsing a part of the file.
 
-
+{$ raw $}
 ```html
-{$ raw $} ${ thisWontBeEvaluated } {$ endraw $}
+{$ raw $} ${ thisWontBeEvaluated } {$ endraw $}{$ endraw $}
 ```
 
 
-Or you can use the `{$ comment $}` tag to skip over that part of the file altogether.
+Or you can use the `{$ raw $}{$ comment $}{$ endraw $}` tag to skip over that part of the file altogether.
 
-
+{$ raw $}
 ```html
 {$ comment $} This wont show. ${ thisWontShowAtAll } neither will this. {$ endcomment $}
 ```
-
+{$ endraw $}
 
 
 
@@ -130,7 +110,7 @@ Or you can use the `{$ comment $}` tag to skip over that part of the file altoge
 
 At the start of every template, block, or forloop, you can define template variables with a let tag.
 
-
+{$ raw $}
 ```html
 {$ let time = ioTime $}
 
@@ -143,7 +123,7 @@ ${ time }
   {$ endfor $}
 </ul>
 ```
-
+{$ endraw $}
 
 
 ### Includes
@@ -155,12 +135,12 @@ includes.strp
 Other Template
 ```
 
-
+{$ raw $}
 ```html
 This is a template that calls another.
 The other template: {$ include includes.strp $}
 ```
-
+{$ endraw $}
 
 Result:
 
@@ -174,7 +154,7 @@ The other template: Other Template
 
 Any block, forloop, or template can inherit from another template. This allows you to specify a base template with `block` tags that will get filled by content defined in `isblock`. If an `inherits` tag is encountered, only `isblock` tags will be allowed at that level. 
 
-
+{$ raw $}
 base.strp
 ```html
 This is a base template
@@ -182,9 +162,9 @@ ${ time }
 {$ block title $} Default Title {$ endblock $}
 {$ block body $} Default Body {$ endblock $}
 ```
+{$ endraw $}
 
-
-
+{$ raw $}
 ```html
 {$ let time = ioTime $}
 {$ inherits base.strp $}
@@ -192,11 +172,11 @@ ${ time }
 {$ isblock title $}Block title!!{$ endisblock $}
 {$ isblock title $}Block Body!!{$ endisblock $}
 ```
-
+{$ endraw $}
 
 Here is an example of using inheritence at different levels:
 
-
+{$ raw $}
 ```html
 {$ let time = ioTime $}
 
@@ -214,7 +194,7 @@ Here is an example of using inheritence at different levels:
   {$ endfor $}
 {$ endisblock $}
 ```
-
+{$ endraw $}
 
 Speed
 =====

@@ -8,14 +8,10 @@ import Text.ParserCombinators.Parsec
 
 import Data.Time
 
-makeBucket :: Int -> InputBucket IO
-makeBucket i = bucket
-  where bucket "render_size" = Just $ LitVal $ LitInt i
-        bucket "is" = Just $ List $ map (LitVal . LitInt) [1..i]
-        bucket "ioTime" = Just $ Func (\_ -> (liftIO $ getCurrentTime) >>= (\c -> return $ LitText $ T.pack $ show c) )
-        bucket _ = Nothing
+makeBucket :: Integer -> InputBucket IO
+makeBucket i = varBucket "is" $ List $ map (LitVal . LitInteger) [1..i]
 
-benchmarks st = map (\i -> bench (show i) $ whnfIO $ (liftM (fmap (B.toByteString)) $ render st (makeBucket i) "big.strp")) [100,200..1000]
+benchmarks st = map (\i -> bench (show i) $ whnfIO $ (liftM (fmap (B.toByteString)) $ render st (makeBucket i) "big-simple.strp")) [100,200..1000]
 
 main :: IO ()
 main = do
@@ -23,8 +19,6 @@ main = do
   case tmpls of
     Left err -> print err
     Right store -> do
-      rendered <- render (defaultConfig {templateStore = store}) (makeBucket 2) "big.strp"
+      rendered <- render (defaultConfig {templateStore = store}) (makeBucket 2) "big-simple.strp"
       either (print) (print . B.toByteString) rendered
       defaultMain [ bgroup "builder" (benchmarks (defaultConfig {templateStore = store})) ]
-
-  

@@ -2,14 +2,19 @@ module Text.Strapped
   ( -- * Rendering
     render
   , defaultConfig
+  , showToBuilder
     -- ** Controlling variables 
   , combineBuckets
   , varBucket
+  , bucketLookup
+  , bucketFromList
+  , emptyBucket
     -- * Parsing
   , parseTemplate
     -- * TemplateLoading
   , templateStoreFromList
   , templateStoreFromDirectory
+  , putStore
   , module Text.Strapped.Types
   ) where
   
