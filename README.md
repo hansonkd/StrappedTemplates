@@ -39,7 +39,7 @@ main = do
   case tmpls of
     Left err -> print err
     Right store -> do
-      rendered <- render (defaultConfig {templateStore = store}) (makeBucket 2) "example.strp"
+      rendered <- render (putStore store defaultConfig) (makeBucket 2) "base_simple.strp"
       either (print) (print . B.toByteString) rendered
 ```
 

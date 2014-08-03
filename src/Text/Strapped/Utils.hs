@@ -26,5 +26,8 @@ templateStoreFromDirectory dir ext = do
   return $ templateStoreFromList tmpls
   where dirPath = addTrailingPathSeparator dir
 
+putStore :: TemplateStore -> RenderConfig -> RenderConfig
+putStore ts rc = rc { templateStore = ts } 
+
 showToBuilder :: Show a => a -> Builder
 showToBuilder = fromShow

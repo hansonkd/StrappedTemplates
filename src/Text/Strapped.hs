@@ -14,6 +14,7 @@ module Text.Strapped
     -- * TemplateLoading
   , templateStoreFromList
   , templateStoreFromDirectory
+  , putStore
   , module Text.Strapped.Types
   ) where
   
