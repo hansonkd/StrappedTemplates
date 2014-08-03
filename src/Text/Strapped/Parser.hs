@@ -69,6 +69,22 @@ parseBlock = do
   blockContent <- parseContent (tryTag $ string "endblock") 
   return $ ParsedPiece (BlockPiece blockName blockContent) pos
 
+parseRaw :: GenParser Char st ParsedPiece
+parseRaw = do
+  pos <- getPosition
+  tag (string "raw") <?> "Raw tag"
+  c <- anyChar
+  s <- manyTill anyChar (tryTag (string "endraw"))
+  return $ ParsedPiece (StaticPiece (B.fromString $ c:s)) pos
+
+parseComment :: GenParser Char st ParsedPiece
+parseComment = do
+  pos <- getPosition
+  tag (string "comment") <?> "Comment tag"
+  c <- anyChar
+  s <- manyTill anyChar (tryTag (string "endcomment"))
+  return $ ParsedPiece (StaticPiece mempty) pos
+
 parseFor :: GenParser Char st ParsedPiece
 parseFor = do
   pos <- getPosition
@@ -157,7 +173,9 @@ parseStatic = do
   return $ ParsedPiece (StaticPiece (B.fromString $ c:s)) pos
 
 parseNonStatic :: GenParser Char st ParsedPiece
-parseNonStatic =  try parseBlock
+parseNonStatic =  try parseComment
+              <|> try parseRaw
+              <|> try parseBlock
               <|> try parseFor
               <|> try parseInclude
               <|> parseFunc

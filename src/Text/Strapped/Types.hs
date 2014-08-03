@@ -68,7 +68,7 @@ data Literal = forall a . (Typeable a, Renderable a) => LitDyn a
 data StrapError = StrapError String  SourcePos 
                 | InputNotFound String  SourcePos 
                 | TemplateNotFound String  SourcePos
-  deriving (Show)
+  deriving (Show, Eq)
 
 type InputBucket m = [M.Map String (Input m)]
 
