@@ -3,10 +3,11 @@ module Text.Strapped.Types where
 
 import Blaze.ByteString.Builder
 import Control.Monad.Except
-import Data.List (intersperse)
+import qualified Data.ByteString.Lazy.Char8 as BS
+import Data.List  as L (intersperse, null)
 import qualified Data.Map as M
 import Data.Monoid (mconcat)
-import Data.Text.Lazy (Text)
+import Data.Text.Lazy as T (Text, null, unpack)
 import Data.Typeable
 import Text.Parsec.Pos
 
@@ -17,17 +18,13 @@ instance Show Builder where
 
 data Expression = 
   LookupExpression String |
-  IntegerExpression Integer |
-  FloatExpression Double |
-  StringExpression String |
+  LiteralExpression Literal |
   ListExpression [ParsedExpression] |
   Multipart [ParsedExpression]
 
 instance Show Expression where
   show (LookupExpression s) = s
-  show (IntegerExpression s) = show s
-  show (FloatExpression s) = show s
-  show (StringExpression s) = "\"" ++ s ++ "\""
+  show (LiteralExpression s) = show s
   show (ListExpression l) = "[" ++ (mconcat $ intersperse "," (map show l)) ++ "]"
   show (Multipart l) = mconcat $ map show l
 
@@ -39,6 +36,7 @@ instance Show ParsedExpression where
 data Piece = StaticPiece Output
            | BlockPiece String [ParsedPiece]
            | ForPiece String ParsedExpression [ParsedPiece]
+           | IfPiece ParsedExpression [ParsedPiece] [ParsedPiece]
            | FuncPiece ParsedExpression
            | Decl String ParsedExpression
            | Include String
@@ -63,7 +61,34 @@ data Literal = forall a . (Typeable a, Renderable a) => LitDyn a
              | LitDouble Double
              | LitBuilder Builder
              | LitList ![Literal]
+             | LitBool Bool
              | LitEmpty
+
+class Booly a where
+  toBool :: a -> Bool
+
+instance Booly Literal where
+  toBool (LitDyn a) = maybe False id (cast a)
+  toBool (LitText a) = not $ T.null a
+  toBool (LitSafe a) = not $ T.null a
+  toBool (LitInteger a) = (0 /= a)
+  toBool (LitDouble a) = (0.0 /= a)
+  toBool (LitBuilder a) = not $ BS.null $ (toLazyByteString a)
+  toBool (LitList a) = not $ L.null a
+  toBool (LitBool a) = a
+  toBool LitEmpty = False
+
+instance Show Literal where
+  show (LitDyn a) = "LitDyn"
+  show (LitText a) = T.unpack a
+  show (LitSafe a) = T.unpack a
+  show (LitInteger a) = show a
+  show (LitDouble a) = show a
+  show (LitBuilder a) = BS.unpack $ (toLazyByteString a)
+  show (LitList a) = show a
+  show (LitBool a) = show a
+  show LitEmpty = ""
+
 
 data StrapError = StrapError String  SourcePos 
                 | InputNotFound String  SourcePos 

@@ -1,5 +1,15 @@
 ${ ioTime }
 
+{$ if True $}
+positve
+{$ else $}
+Dont show
+{$ endif $}
+
+{$ if False $}
+negative
+{$ endif $}
+
 {$ for i in is $}
     ${ i }
 {$ endfor $}

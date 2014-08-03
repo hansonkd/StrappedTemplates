@@ -13,7 +13,7 @@ makeBucket i = bucketFromList
 
 main :: IO ()
 main = do
-  tmpls <- templateStoreFromDirectory "benchmarks/strapped_templates" ".strp"
+  tmpls <- templateStoreFromDirectory "../benchmarks/strapped_templates" ".strp"
   case tmpls of
     Left err -> print err
     Right store -> do

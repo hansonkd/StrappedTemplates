@@ -30,6 +30,8 @@ pathString = many1 $ oneOf "_./" <|> alphaNum
 peekChar :: Char -> GenParser Char st ()
 peekChar = void . try . lookAhead . char
 
+peekTag = void . try . lookAhead . tag
+
 tryTag :: GenParser Char st a -> GenParser Char st ()
 tryTag = void . try . tag
 
@@ -84,6 +86,14 @@ parseComment = do
   c <- anyChar
   s <- manyTill anyChar (tryTag (string "endcomment"))
   return $ ParsedPiece (StaticPiece mempty) pos
+
+parseIf :: GenParser Char st ParsedPiece
+parseIf = do
+  pos <- getPosition
+  exp <- (tagStart >> spaces >> string "if" >> spaces >> parseExpression (try $ spaces >> tagEnd)) <?> "If tag"
+  positive <- parseContent ((peekTag $ string "endif") <|> (tryTag $ string "else"))
+  negative <- parseContent (tryTag $ string "endif")
+  return $ ParsedPiece (IfPiece exp positive negative) pos
 
 parseFor :: GenParser Char st ParsedPiece
 parseFor = do
@@ -141,8 +151,9 @@ parseExpression end = manyPart <?> "Expression"
             exp <- try parseList <|> 
                    try (parseString '\"') <|> 
                    try (parseString '\'') <|> 
-                   try (parseFloat >>= (return . FloatExpression)) <|> 
-                   try (parseInt >>= (return . IntegerExpression)) <|>
+                   try (parseFloat >>= (return . LiteralExpression . LitDouble)) <|> 
+                   try (parseInt >>= (return . LiteralExpression . LitInteger)) <|>
+                   try (parseBool >>= (return . LiteralExpression . LitBool)) <|>
                    literal
             return $ ParsedExpression exp pos
         parens = (string "(" >> spaces) >> parseExpression (try $ spaces >> string ")")
@@ -154,7 +165,8 @@ parseExpression end = manyPart <?> "Expression"
           pos <- getPosition
           pieces <- manyTill (spaces >> parseGroup) end
           return $ ParsedExpression (Multipart pieces) pos
-        parseString esc = parseStringContents esc >>= (return . StringExpression)
+        parseString esc = parseStringContents esc >>= (return . LiteralExpression . LitText . T.pack)
+        parseBool = (try $ string "True" >> return True) <|> (try $ string "False" >> return False)
         literal = wordString >>= (return . LookupExpression)
 
 parseStringContents ::  Char -> GenParser Char st String
@@ -176,6 +188,7 @@ parseNonStatic :: GenParser Char st ParsedPiece
 parseNonStatic =  try parseComment
               <|> try parseRaw
               <|> try parseBlock
+              <|> try parseIf
               <|> try parseFor
               <|> try parseInclude
               <|> parseFunc
