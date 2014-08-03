@@ -112,9 +112,9 @@ You can use the `{$ raw $}` tag to prevent the parser from parsing a part of the
 
 
 ```html
-{$ raw $} ${ thisWontBeEvaluated } 
+{$ raw $} ${ thisWontBeEvaluated } {$ endraw $}
 ```
-{$ endraw $}
+
 
 Or you can use the `{$ comment $}` tag to skip over that part of the file altogether.
 
