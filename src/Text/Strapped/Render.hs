@@ -30,6 +30,7 @@ instance Renderable Literal where
   renderOutput _ (LitSafe s)     = fromLazyText s
   renderOutput rc (LitInteger i) = fromShow i
   renderOutput rc (LitDouble i)  = fromShow i
+  renderOutput rc (LitBool i)    = fromShow i
   renderOutput _ (LitBuilder b)  = b
   renderOutput rc (LitList l)    = (fromChar '[') <> 
                                    (mconcat $ intersperse (fromChar ',') (map (renderOutput rc) l)) <> 
@@ -64,9 +65,7 @@ getOrThrow v getter pos = maybe (throwError $ InputNotFound v pos) return (bucke
 reduceExpression :: Monad m => RenderConfig -> ParsedExpression -> InputBucket m -> ExceptT StrapError m Literal
 reduceExpression c (ParsedExpression exp pos) getter = convert exp
   where convertMore exp = reduceExpression c exp getter
-        convert (IntegerExpression i) = return $ LitInteger i
-        convert (FloatExpression i) = return $ LitDouble i
-        convert (StringExpression s) = return $ LitText (T.pack s)
+        convert (LiteralExpression i) = return $ i
         convert (Multipart []) = return $ LitEmpty
         convert (Multipart (f:[])) = convertMore f
         convert (Multipart ((ParsedExpression (LookupExpression func) ipos):args)) = do
@@ -106,6 +105,11 @@ render renderConfig getter' tmplName = do
           case var of 
             LitList l -> (processFor getter n c accum blks l) >>= (\a -> loop a blks getter ps)
             _ -> throwError $ StrapError ("`" ++ show exp ++ "` is not a LitList") pos
+        loop accum blks getter ((ParsedPiece (IfPiece exp p n) pos):ps) = do
+          var <- reduceExpression renderConfig exp getter
+          case (toBool var) of
+            True -> (loop accum blks getter p) >>= (\a -> loop a blks getter ps)
+            False -> (loop accum blks getter n) >>= (\a -> loop a blks getter ps)
         loop accum blks getter ((ParsedPiece (Inherits n b) pos):ps) =
             liftIO (tmplStore n) >>=
             maybe (throwError (TemplateNotFound n pos))

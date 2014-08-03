@@ -11,6 +11,29 @@ The objective of this project is to build an easy-to-use, flexible, general purp
 Quick Start
 ===========
 
+### Syntax
+Strapped renders variables to text with this tag:
+
+`${ _ }`
+
+
+Strapped includes these tag blocks:
+
+ `{$ inherits _ $}` {$ let _ = _ $}` `{$ includes _ $}` `{$ for _ in _ $}{$ endfor $}` `{$ if _ $}{$ endif $}` `{% block _ $}{$ endblock $}` `{$ comment $}{$ endcomment $}` `{$ raw $}{$ endraw $}`
+
+### Expressions
+Strapped gives you a limited number of expressions you can define in your template. Improving this is a core focus of future releases.
+
+Currently expressions include Bools, Lists, 0 arity functions, 1 arity functions, strings, ints, floats. 
+
+
+```
+${ takesAList ["string", 1, 1.0, [True, zeroArityFunc, lookupVar], (someFunc False)] }
+```
+
+
+### Rendering
+
 Strapped templates need two things to render. A `TemplateStore` and an `InputBucket m`. 
 
 `TemplateStore` is just function that take a String and returns a template.
@@ -35,7 +58,7 @@ makeBucket i = bucketFromList
 
 main :: IO ()
 main = do
-  tmpls <- templateStoreFromDirectory "benchmarks/strapped_templates" ".strp"
+  tmpls <- templateStoreFromDirectory "../benchmarks/strapped_templates" ".strp"
   case tmpls of
     Left err -> print err
     Right store -> do

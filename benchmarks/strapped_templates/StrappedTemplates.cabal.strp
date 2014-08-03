@@ -23,6 +23,7 @@ description:
 library
   exposed-modules:     Text.Strapped, Text.Strapped.Parser, Text.Strapped.Render, Text.Strapped.Types, Text.Strapped.Utils
   build-depends:       base >= 4.7 && < 4.8,
+                       bytestring >= 0.10 && < 0.11,
                        containers >= 0.5 && < 0.6,
                        text >= 1.0 && < 1.2, 
                        blaze-builder >=0.3 && < 0.4,

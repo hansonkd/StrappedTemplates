@@ -61,6 +61,9 @@ spec ts = do
       it "Checks Function" $ 
         (render ts mainBucket "func") `renderShouldBe` (Right "4")
 
+    describe "If" $
+      it "Checks if" $ 
+        (render ts mainBucket "if") `renderShouldBe` (Right "show me")
 
 main = do
     let ets = templateStoreFromList 
@@ -73,5 +76,6 @@ main = do
             , ("base", "Some base {$ block some_block $}blah blah {$ endblock $}")
             , ("inherits", "{$ inherits base $}{$ isblock some_block $}override{$ endisblock $}")
             , ("func", "${ addNumbers [(addNumbers [1, 1]), 2] }")
+            , ("if", "{$ if True $}show me{$ else $}dont show{$ endif $}{$ if False $}shouldn't see{$ endif $}")
             ]
     either (\_ -> exitFailure) (\ts -> hspec $ spec (defaultConfig {templateStore = ts})) ets
