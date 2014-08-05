@@ -1,17 +1,48 @@
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveFunctor              #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+
 module Text.Strapped.Types where
 
 import Blaze.ByteString.Builder
+import           Control.Applicative
 import Control.Monad.Except
 import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.List  as L (intersperse, null)
 import qualified Data.Map as M
+import Control.Monad.State
+import Control.Monad.Writer
 import Data.Monoid (mconcat)
 import Data.Text.Lazy as T (Text, null, unpack)
 import Data.Typeable
 import Text.Parsec.Pos
 
+
+-- | RenderT m
+--
+--   * m -> Monad we are transforming
+newtype RenderT m a = RenderT 
+  { runRenderT :: WriterT Output (ExceptT StrapError (StateT (RenderState m) m)) a 
+  } deriving ( Functor, Applicative, Monad, MonadIO )
+
+instance MonadTrans RenderT where
+  lift = RenderT . lift . lift . lift
+  
+data RenderState m = RenderState
+  { position :: SourcePos
+  , renderConfig :: RenderConfig
+  , blocks :: BlockMap
+  , bucket :: InputBucket m
+  }
+
+instance (Monad m) => MonadError StrapError (RenderT m) where
+    throwError = RenderT . throwError
+    catchError (RenderT m) f = RenderT (catchError m (runRenderT . f))
+    
 type Output = Builder
+type BlockMap = M.Map String [ParsedPiece]
 
 instance Show Builder where
   show = show . toByteString
@@ -40,7 +71,7 @@ data Piece = StaticPiece Output
            | FuncPiece ParsedExpression
            | Decl String ParsedExpression
            | Include String
-           | Inherits String [(String, [ParsedPiece])]
+           | Inherits String BlockMap
            deriving (Show)
 
 data ParsedPiece = ParsedPiece Piece SourcePos
@@ -51,7 +82,7 @@ class Renderable a where
   
 data Input m = forall a . (Renderable a) => RenderVal a
              | List [Input m]
-             | Func  (Literal -> ExceptT StrapError m Literal)
+             | Func  (Literal -> RenderT m Literal)
              | LitVal Literal
 
 data Literal = forall a . (Typeable a, Renderable a) => LitDyn a
@@ -63,6 +94,9 @@ data Literal = forall a . (Typeable a, Renderable a) => LitDyn a
              | LitList ![Literal]
              | LitBool Bool
              | LitEmpty
+
+class Block a where
+  process :: (MonadIO m) => a -> RenderT m ()
 
 class Booly a where
   toBool :: a -> Bool

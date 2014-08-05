@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleContexts #-}
+
 module Text.Strapped.Render 
   ( combineBuckets
   , varBucket
@@ -15,6 +17,8 @@ import qualified Data.Map as M
 import Data.List (intersperse)
 import Data.Monoid ((<>), mempty, mconcat)
 import Control.Monad.Except
+import Control.Monad.Trans.State
+import Control.Monad.Trans.Writer
 import Control.Monad.IO.Class
 import Data.Maybe (catMaybes)
 import qualified Data.Text.Lazy as T
@@ -60,30 +64,33 @@ bucketLookup v (m:ms) = maybe (bucketLookup v ms) Just (M.lookup v m)
 bucketFromList :: [(String, Input m)] -> InputBucket m
 bucketFromList l = [M.fromList l]
 
-getOrThrow v getter pos = maybe (throwError $ InputNotFound v pos) return (bucketLookup v getter)
+getOrThrow :: (Monad m) => String -> RenderT m (Input m)
+getOrThrow v = do
+  pos <- getPos
+  getter <- getBucket
+  maybe (throwError $ InputNotFound v pos) return (bucketLookup v getter)
 
-reduceExpression :: Monad m => RenderConfig -> ParsedExpression -> InputBucket m -> ExceptT StrapError m Literal
-reduceExpression c (ParsedExpression exp pos) getter = convert exp
-  where convertMore exp = reduceExpression c exp getter
-        convert (LiteralExpression i) = return $ i
+reduceExpression :: (Monad m) => ParsedExpression -> RenderT m Literal
+reduceExpression (ParsedExpression exp pos) = putPos pos >> convert exp
+  where convert (LiteralExpression i) = return $ i
         convert (Multipart []) = return $ LitEmpty
-        convert (Multipart (f:[])) = convertMore f
+        convert (Multipart (f:[])) = reduceExpression f
         convert (Multipart ((ParsedExpression (LookupExpression func) ipos):args)) = do
-          val <- getOrThrow func getter pos
+          val <- getOrThrow func
           case val of
             (Func f) -> convert (Multipart args) >>= f
-            _ -> throwError $ StrapError ("`" ++ func ++ "` is not a function but has args: " ++ (show args)) ipos
-        convert (Multipart v) = throwError $ StrapError ("`" ++ (show v) ++ "` cannot be reduced.") pos
-        convert (ListExpression args) = mapM convertMore args >>= (return . LitList) 
+            _ -> throwParser $ "`" ++ func ++ "` is not a function but has args: " ++ (show args)
+        convert (Multipart v) = throwParser $ "`" ++ (show v) ++ "` cannot be reduced."
+        convert (ListExpression args) = mapM reduceExpression args >>= (return . LitList) 
         convert (LookupExpression f) = do
-            val <- getOrThrow f getter pos
+            val <- getOrThrow f
             inputToLiteral val
         inputToLiteral inp = case inp of
                     (List args) -> mapM inputToLiteral args >>= (return . LitList)
-                    (RenderVal r) -> return $ LitBuilder (renderOutput c r)
+                    (RenderVal r) -> getConfig >>= (\c -> return $ LitBuilder (renderOutput c r))
                     (Func f) -> f LitEmpty
                     (LitVal v) -> return v
-
+{-
 -- | Using a 'TemplateStore' and an 'InputBucket' render the template name.
 render :: MonadIO m => RenderConfig -> InputBucket m -> String -> m (Either StrapError Output)
 render renderConfig getter' tmplName = do
@@ -134,3 +141,95 @@ render renderConfig getter' tmplName = do
                 loopFor accum (o:os) = do
                       s <- loop accum blks (loopGetter o) content
                       loopFor s os
+                      
+-}
+                  
+putPos :: Monad m => SourcePos -> RenderT m ()
+putPos a = RenderT $ lift $ lift $ modify (\i -> i { position=a })
+
+putBucket :: Monad m => (InputBucket m) -> RenderT m ()
+putBucket a = RenderT $ lift $ lift $ modify (\i -> i { bucket=a })
+
+getPos :: Monad m => RenderT m SourcePos
+getPos = liftM position getState
+
+getBucket :: Monad m => RenderT m (InputBucket m)
+getBucket = liftM bucket getState
+
+getConfig :: Monad m => RenderT m RenderConfig
+getConfig = liftM renderConfig getState
+
+getBlocks :: Monad m => RenderT m BlockMap
+getBlocks = liftM blocks getState
+
+putBlocks :: Monad m => BlockMap -> RenderT m ()
+putBlocks a = RenderT $ lift $ lift $ modify (\i -> i { blocks=a })
+
+getState :: Monad m => RenderT m (RenderState m)
+getState = RenderT $ lift $ lift $ get
+
+throwParser :: (Monad m) => String -> RenderT m b
+throwParser s = getPos >>= (\pos -> throwError $ StrapError s pos)
+
+writeOutput :: Monad m => Output -> RenderT m ()
+writeOutput o = RenderT $ tell o
+
+instance Block Piece where
+  process (StaticPiece s) = writeOutput s
+  process (BlockPiece n default_content) = do
+    blks <- getBlocks
+    maybe (buildContent default_content) buildContent (M.lookup n blks)
+  process (ForPiece n exp c) = do
+    var <- reduceExpression exp
+    curBucket <- getBucket
+    case var of 
+      LitList l -> forM l $ \obj -> do
+          putBucket $ combineBuckets (varBucket n (LitVal obj)) curBucket
+          buildContent c
+      _ -> throwParser $ "`" ++ show exp ++ "` is not a LitList"
+    putBucket curBucket
+  process (IfPiece exp p n) = do
+      var <- reduceExpression exp
+      case (toBool var) of
+        True -> buildContent p
+        False -> buildContent n
+  process (Inherits n b) = do
+      tmplStore <- liftM templateStore getConfig
+      mtmpl <- liftIO (tmplStore n)
+      maybe (getPos >>= (\pos -> throwError (TemplateNotFound n pos)))
+            (\(Template c) -> do 
+                  curBlocks <- getBlocks
+                  putBlocks $ M.union b curBlocks
+                  buildContent c
+                  putBlocks curBlocks)
+            mtmpl
+  process (Include n) = do
+    tmplStore <- liftM templateStore getConfig
+    mtmpl <- liftIO (tmplStore n)
+    maybe (getPos >>= (\pos -> throwError (TemplateNotFound n pos)))
+          (\(Template c) -> buildContent c)
+          mtmpl
+  process (Decl n exp) = do
+      val <- (reduceExpression exp)
+      bucket <- getBucket
+      putBucket $ combineBuckets (varBucket n (LitVal val)) bucket
+      
+  process (FuncPiece exp) = do
+    config <- getConfig
+    val <- reduceExpression exp
+    writeOutput $ renderOutput config val
+    
+      
+buildContent pieces = forM_ pieces (\(ParsedPiece piece pos) -> putPos pos >> process piece)
+        
+render :: (MonadIO m)=> RenderConfig -> InputBucket m -> String -> m (Either StrapError (Output))
+render renderConfig getter' tmplName = do
+      tmpl <- liftIO $ tmplStore tmplName
+      maybe (return $ Left $ TemplateNotFound tmplName (initialPos tmplName)) 
+            (\(Template c) -> (flip evalStateT startState $ runExceptT $ runWriterT $ runRenderT $ buildContent c) >>= (return . fmap snd))
+            tmpl
+            
+  where tmplStore = templateStore renderConfig
+        startState = RenderState (initialPos tmplName) renderConfig M.empty getter'
+        
+        

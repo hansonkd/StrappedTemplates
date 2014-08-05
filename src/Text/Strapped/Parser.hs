@@ -5,6 +5,7 @@ module Text.Strapped.Parser
 import Control.Applicative ((<*>))
 import Control.Monad
 import Data.Monoid
+import qualified Data.Map as M
 import qualified Data.Text.Lazy as T
 import Blaze.ByteString.Builder as B
 import Blaze.ByteString.Builder.Char.Utf8 as B
@@ -58,7 +59,7 @@ parseContent end = do
   case (extends) of
     Just (e, epos) -> do
       includes <- manyTill parseIsIgnoreSpace end
-      return $ (decls) ++ [ParsedPiece (Inherits e includes) epos]
+      return $ (decls) ++ [ParsedPiece (Inherits e (M.fromList includes)) epos]
     _     -> do
       ps <- manyTill parsePiece end
       return $ decls ++ ps
