@@ -85,7 +85,7 @@ data Input m = forall a . (Renderable a) => RenderVal a
              | Func  (Literal -> RenderT m Literal)
              | LitVal Literal
 
-data Literal = forall a . (Typeable a, Renderable a) => LitDyn a
+data Literal = forall a . (Typeable a, Renderable a) => LitDyn !a
              | LitText Text
              | LitSafe Text
              | LitInteger Integer
@@ -96,7 +96,7 @@ data Literal = forall a . (Typeable a, Renderable a) => LitDyn a
              | LitEmpty
 
 class Block a where
-  process :: (MonadIO m) => a -> RenderT m Output
+  process :: (MonadIO m) => a -> Output -> RenderT m Output
 
 class Booly a where
   toBool :: a -> Bool
@@ -129,7 +129,7 @@ data StrapError = StrapError String  SourcePos
                 | TemplateNotFound String  SourcePos
   deriving (Show, Eq)
 
-data InputBucket m = InputBucket !(M.Map String (Input m))
+data InputBucket m = InputBucket [(M.Map String (Input m))]
 
 type TemplateStore = String -> IO (Maybe Template)
 
