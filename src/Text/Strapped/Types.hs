@@ -15,7 +15,7 @@ import qualified Data.Map as M
 import Control.Monad.State
 import Control.Monad.Writer
 import Data.Monoid (mconcat)
-import Data.Text.Lazy as T (Text, null, unpack)
+import Data.Text as T (Text, null, unpack)
 import Data.Typeable
 import Text.Parsec.Pos
 
@@ -24,11 +24,11 @@ import Text.Parsec.Pos
 --
 --   * m -> Monad we are transforming
 newtype RenderT m a = RenderT 
-  { runRenderT :: WriterT Output (ExceptT StrapError (StateT (RenderState m) m)) a 
+  { runRenderT :: ExceptT StrapError (StateT (RenderState m) m) a 
   } deriving ( Functor, Applicative, Monad, MonadIO )
 
 instance MonadTrans RenderT where
-  lift = RenderT . lift . lift . lift
+  lift = RenderT . lift . lift
   
 data RenderState m = RenderState
   { position :: SourcePos
@@ -91,12 +91,12 @@ data Literal = forall a . (Typeable a, Renderable a) => LitDyn a
              | LitInteger Integer
              | LitDouble Double
              | LitBuilder Builder
-             | LitList ![Literal]
+             | LitList [Literal]
              | LitBool Bool
              | LitEmpty
 
 class Block a where
-  process :: (MonadIO m) => a -> RenderT m ()
+  process :: (MonadIO m) => a -> RenderT m Output
 
 class Booly a where
   toBool :: a -> Bool
@@ -129,7 +129,7 @@ data StrapError = StrapError String  SourcePos
                 | TemplateNotFound String  SourcePos
   deriving (Show, Eq)
 
-type InputBucket m = [M.Map String (Input m)]
+data InputBucket m = InputBucket !(M.Map String (Input m))
 
 type TemplateStore = String -> IO (Maybe Template)
 

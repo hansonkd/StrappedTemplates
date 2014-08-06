@@ -6,7 +6,7 @@ import Control.Applicative ((<*>))
 import Control.Monad
 import Data.Monoid
 import qualified Data.Map as M
-import qualified Data.Text.Lazy as T
+import qualified Data.Text as T
 import Blaze.ByteString.Builder as B
 import Blaze.ByteString.Builder.Char.Utf8 as B
 import Text.Parsec
@@ -193,7 +193,7 @@ parseNonStatic =  try parseComment
               <|> try parseFor
               <|> try parseInclude
               <|> parseFunc
-              
+
 parsePiece :: GenParser Char st ParsedPiece
 parsePiece = (try parseNonStatic <|> parseStatic)
 

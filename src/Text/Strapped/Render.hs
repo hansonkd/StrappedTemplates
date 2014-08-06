@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE BangPatterns #-}
 
 module Text.Strapped.Render 
   ( combineBuckets
@@ -13,25 +14,26 @@ module Text.Strapped.Render
 import Blaze.ByteString.Builder
 import Blaze.ByteString.Builder.Char.Utf8
 import Control.Monad
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 import Data.List (intersperse)
 import Data.Monoid ((<>), mempty, mconcat)
 import Control.Monad.Except
-import Control.Monad.Trans.State
-import Control.Monad.Trans.Writer
+import Control.Monad.State
+import Control.Monad.Writer
 import Control.Monad.IO.Class
 import Data.Maybe (catMaybes)
-import qualified Data.Text.Lazy as T
+import qualified Data.Text as T
 import Text.Strapped.Types
 import Text.Parsec.Pos
 
+import Debug.Trace
 
 instance Renderable Builder where
   renderOutput _ = id
 
 instance Renderable Literal where
-  renderOutput (RenderConfig _ ef) (LitText s) = fromLazyText $ ef s
-  renderOutput _ (LitSafe s)     = fromLazyText s
+  renderOutput (RenderConfig _ ef) (LitText s) = fromText $ ef s
+  renderOutput _ (LitSafe s)     = fromText s
   renderOutput rc (LitInteger i) = fromShow i
   renderOutput rc (LitDouble i)  = fromShow i
   renderOutput rc (LitBool i)    = fromShow i
@@ -45,14 +47,15 @@ instance Renderable Literal where
 defaultConfig :: RenderConfig
 defaultConfig = RenderConfig (\_ -> return Nothing) id
 
--- | If the first bucket fails, try the second.
-combineBuckets :: InputBucket m -> InputBucket m -> InputBucket m
-combineBuckets = (++) 
-
 -- | Basic bucket. Matches on string and return input. Returns Nothing for
 --   everything else.
 varBucket :: String -> Input m -> InputBucket m
-varBucket varName o = [M.fromList [(varName, o)]]
+varBucket varName o = bucketFromList [(varName, o)]
+
+{-
+-- | If the first bucket fails, try the second.
+combineBuckets :: InputBucket m -> InputBucket m -> InputBucket m
+combineBuckets = (++) 
 
 emptyBucket :: InputBucket m
 emptyBucket = []
@@ -63,6 +66,16 @@ bucketLookup v (m:ms) = maybe (bucketLookup v ms) Just (M.lookup v m)
 
 bucketFromList :: [(String, Input m)] -> InputBucket m
 bucketFromList l = [M.fromList l]
+-}
+
+combineBuckets (InputBucket a) (InputBucket b) = InputBucket $ M.union a b
+
+emptyBucket = InputBucket M.empty
+
+bucketLookup v (InputBucket a) = M.lookup v a
+
+bucketFromList = InputBucket . M.fromList
+
 
 getOrThrow :: (Monad m) => String -> RenderT m (Input m)
 getOrThrow v = do
@@ -145,10 +158,10 @@ render renderConfig getter' tmplName = do
 -}
                   
 putPos :: Monad m => SourcePos -> RenderT m ()
-putPos a = RenderT $ lift $ lift $ modify (\i -> i { position=a })
+putPos a = RenderT $ lift $ modify (\i -> i { position=a })
 
 putBucket :: Monad m => (InputBucket m) -> RenderT m ()
-putBucket a = RenderT $ lift $ lift $ modify (\i -> i { bucket=a })
+putBucket a = RenderT $ lift $ modify (\i -> i { bucket=a })
 
 getPos :: Monad m => RenderT m SourcePos
 getPos = liftM position getState
@@ -163,31 +176,31 @@ getBlocks :: Monad m => RenderT m BlockMap
 getBlocks = liftM blocks getState
 
 putBlocks :: Monad m => BlockMap -> RenderT m ()
-putBlocks a = RenderT $ lift $ lift $ modify (\i -> i { blocks=a })
+putBlocks a = RenderT $ lift $  modify (\i -> i { blocks=a })
 
 getState :: Monad m => RenderT m (RenderState m)
-getState = RenderT $ lift $ lift $ get
+getState = RenderT $ lift $ get
 
 throwParser :: (Monad m) => String -> RenderT m b
-throwParser s = getPos >>= (\pos -> throwError $ StrapError s pos)
+throwParser s = getPos >>= (\pos -> throwError $ StrapError s pos) 
 
-writeOutput :: Monad m => Output -> RenderT m ()
-writeOutput o = RenderT $ tell o
 
 instance Block Piece where
-  process (StaticPiece s) = writeOutput s
+  process (StaticPiece s) = return s
   process (BlockPiece n default_content) = do
     blks <- getBlocks
     maybe (buildContent default_content) buildContent (M.lookup n blks)
+    return mempty
   process (ForPiece n exp c) = do
     var <- reduceExpression exp
     curBucket <- getBucket
     case var of 
-      LitList l -> forM l $ \obj -> do
-          putBucket $ combineBuckets (varBucket n (LitVal obj)) curBucket
-          buildContent c
+      LitList l -> forM_ l $ \obj -> do
+          putBucket $ trace ("*") combineBuckets (varBucket n (LitVal obj)) curBucket
+          buildContent $ c
       _ -> throwParser $ "`" ++ show exp ++ "` is not a LitList"
     putBucket curBucket
+    return mempty
   process (IfPiece exp p n) = do
       var <- reduceExpression exp
       case (toBool var) of
@@ -200,8 +213,9 @@ instance Block Piece where
             (\(Template c) -> do 
                   curBlocks <- getBlocks
                   putBlocks $ M.union b curBlocks
-                  buildContent c
-                  putBlocks curBlocks)
+                  c <- buildContent c
+                  putBlocks curBlocks
+                  return c)
             mtmpl
   process (Include n) = do
     tmplStore <- liftM templateStore getConfig
@@ -213,20 +227,20 @@ instance Block Piece where
       val <- (reduceExpression exp)
       bucket <- getBucket
       putBucket $ combineBuckets (varBucket n (LitVal val)) bucket
-      
+      return mempty
   process (FuncPiece exp) = do
     config <- getConfig
     val <- reduceExpression exp
-    writeOutput $ renderOutput config val
+    return $ renderOutput config val
     
       
-buildContent pieces = forM_ pieces (\(ParsedPiece piece pos) -> putPos pos >> process piece)
+buildContent pieces = forM pieces (\(ParsedPiece piece pos) -> putPos pos >> process piece) >>= (return . mconcat)
         
 render :: (MonadIO m)=> RenderConfig -> InputBucket m -> String -> m (Either StrapError (Output))
 render renderConfig getter' tmplName = do
       tmpl <- liftIO $ tmplStore tmplName
       maybe (return $ Left $ TemplateNotFound tmplName (initialPos tmplName)) 
-            (\(Template c) -> (flip evalStateT startState $ runExceptT $ runWriterT $ runRenderT $ buildContent c) >>= (return . fmap snd))
+            (\(Template c) -> (flip evalStateT startState $ runExceptT $ runRenderT $ buildContent c))
             tmpl
             
   where tmplStore = templateStore renderConfig

@@ -23,7 +23,7 @@ templateStoreFromDirectory dir ext = do
   files <- find always (extension ==? ext) dirPath
   tmpls <- forM files (\fn -> let fname = maybe [] id $ stripPrefix dirPath fn 
                               in print fname >> readFile fn >>= (return . (,) fname))
-  return $ templateStoreFromList tmpls
+  return $! templateStoreFromList tmpls
   where dirPath = addTrailingPathSeparator dir
 
 putStore :: TemplateStore -> RenderConfig -> RenderConfig
