@@ -196,8 +196,8 @@ instance Block Piece where
     curBucket <- getBucket
     ret <- case var of 
       LitList l -> forM l (\obj -> do
-          r <- lift $ flip evalStateT (curState {bucket=combineBuckets (varBucket n (LitVal obj)) curBucket}) $ runExceptT $ runRenderT $ buildContent c
-          either throwError return r) 
+          putBucket $ combineBuckets (varBucket n (LitVal obj)) curBucket
+          buildContent c) 
           >>= (return . mconcat)
       _ -> throwParser $ "`" ++ show exp ++ "` is not a LitList"
     putBucket curBucket
