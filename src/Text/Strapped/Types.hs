@@ -31,10 +31,10 @@ instance MonadTrans RenderT where
   lift = RenderT . lift . lift
   
 data RenderState m = RenderState
-  { position :: SourcePos
+  { position     :: SourcePos
   , renderConfig :: RenderConfig
-  , blocks :: BlockMap
-  , bucket :: InputBucket m
+  , blocks       :: BlockMap
+  , bucket       :: InputBucket m
   }
 
 instance (Monad m) => MonadError StrapError (RenderT m) where
@@ -96,7 +96,7 @@ data Literal = forall a . (Typeable a, Renderable a) => LitDyn !a
              | LitEmpty
 
 class Block a where
-  process :: (MonadIO m) => a -> Output -> RenderT m Output
+  process :: (MonadIO m) => a -> RenderT m Output
 
 class Booly a where
   toBool :: a -> Bool

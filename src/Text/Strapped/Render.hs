@@ -186,62 +186,64 @@ throwParser :: (Monad m) => String -> RenderT m b
 throwParser s = getPos >>= (\pos -> throwError $ StrapError s pos) 
 
 instance Block Piece where
-  process (StaticPiece s) accum = return (accum <> s)
-  process (BlockPiece n default_content) accum = do
+  process (StaticPiece s) = return s
+  process (BlockPiece n default_content) = do
     blks <- getBlocks
-    maybe (buildContent default_content accum) (flip buildContent accum) (M.lookup n blks)
-  process (ForPiece n exp c) accum = do
+    maybe (buildContent default_content) (buildContent) (M.lookup n blks)
+  process (ForPiece n exp c) = do
     var <- reduceExpression exp
+    curState <- getState
     curBucket <- getBucket
     ret <- case var of 
-      LitList l -> foldlM (\accum' obj -> do
-          putBucket $ combineBuckets (varBucket n (LitVal obj)) curBucket
-          buildContent c accum') accum l
+      LitList l -> forM l (\obj -> do
+          r <- lift $ flip evalStateT (curState {bucket=combineBuckets (varBucket n (LitVal obj)) curBucket}) $ runExceptT $ runRenderT $ buildContent c
+          either throwError return r) 
+          >>= (return . mconcat)
       _ -> throwParser $ "`" ++ show exp ++ "` is not a LitList"
     putBucket curBucket
     return ret
-  process (IfPiece exp p n) accum = do
+  process (IfPiece exp p n) = do
       var <- reduceExpression exp
       c <- case (toBool var) of
-          True -> buildContent p accum
-          False -> buildContent n accum
+          True -> buildContent p
+          False -> buildContent n
       return c
-  process (Inherits n b) accum = do
+  process (Inherits n b) = do
       tmplStore <- liftM templateStore getConfig
       mtmpl <- liftIO (tmplStore n)
       maybe (getPos >>= (\pos -> throwError (TemplateNotFound n pos)))
                  (\(Template c) -> do 
                       curBlocks <- getBlocks
                       putBlocks $ M.union b curBlocks
-                      c <- buildContent c accum
+                      r <- buildContent c
                       putBlocks curBlocks
-                      return c)
+                      return r)
                  mtmpl
-  process (Include n) accum = do
+  process (Include n) = do
     tmplStore <- liftM templateStore getConfig
     mtmpl <- liftIO (tmplStore n)
     maybe (getPos >>= (\pos -> throwError (TemplateNotFound n pos)))
-          (\(Template c) -> buildContent c accum)
+          (\(Template c) -> buildContent c)
           mtmpl
-  process (Decl n exp) accum = do
+  process (Decl n exp) = do
       val <- (reduceExpression exp)
       bucket <- getBucket
       putBucket $ combineBuckets (varBucket n (LitVal val)) bucket
-      return accum
-  process (FuncPiece exp) accum = do
+      return mempty
+  process (FuncPiece exp) = do
     config <- getConfig
     val <- reduceExpression exp
-    return (accum <> (renderOutput config val))
+    return $ renderOutput config val
     
       
-buildContent pieces accum = foldlM (\accum' (ParsedPiece piece pos) -> putPos pos >> process piece accum') accum pieces
--- buildContent pieces = foldM (\accum (ParsedPiece piece pos) -> putPos pos >> process piece >>= return . (<>) accum) mempty pieces 
+-- buildContent pieces accum = forM_ pieces (\(ParsedPiece piece pos) -> putPos pos >> process piece accum)
+buildContent pieces = mapM (\(ParsedPiece piece pos) -> putPos pos >> process piece) pieces >>= (return . mconcat)
 
-render :: (MonadIO m)=> RenderConfig -> InputBucket m -> String -> m (Either StrapError (Output))
-render renderConfig getter' tmplName = do
+render :: (MonadIO m) => RenderConfig -> InputBucket m -> String -> m (Either StrapError Output)
+render renderConfig !getter' tmplName = do
       tmpl <- liftIO $ tmplStore tmplName
       maybe (return $ Left $ TemplateNotFound tmplName (initialPos tmplName)) 
-            (\(Template c) -> (flip evalStateT startState $ runExceptT $ runRenderT $ buildContent c mempty))
+            (\(Template c) -> (flip evalStateT startState $ runExceptT $ runRenderT $ buildContent c))
             tmpl
             
   where tmplStore = templateStore renderConfig
