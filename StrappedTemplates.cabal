@@ -73,7 +73,9 @@ library
                        mtl >=2.1 && < 2.3,
                        transformers >= 0.4 && < 0.5,
                        filemanip >=0.3.6 && < 0.3.7,
-                       filepath >=1.3 && < 1.4
+                       filepath >=1.3 && < 1.4,
+                       conduit >=1.1,
+                       deepseq >=1.3
   hs-source-dirs:      src
 
 test-suite Main

@@ -11,14 +11,15 @@ import           Control.Applicative
 import Control.Monad.Except
 import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.List  as L (intersperse, null)
-import qualified Data.Map as M
-import Control.Monad.State
+import qualified Data.Map.Strict as M
+import Control.Monad.State.Strict
 import Control.Monad.Writer
 import Data.Monoid (mconcat)
 import Data.Text as T (Text, null, unpack)
 import Data.Typeable
 import Text.Parsec.Pos
-
+import Data.Conduit
+import Control.DeepSeq
 
 -- | RenderT m
 --
@@ -31,11 +32,17 @@ instance MonadTrans RenderT where
   lift = RenderT . lift . lift
   
 data RenderState m = RenderState
-  { position     :: SourcePos
-  , renderConfig :: RenderConfig
-  , blocks       :: BlockMap
-  , bucket       :: InputBucket m
+  { position     :: !(SourcePos)
+  , renderConfig :: !(RenderConfig)
+  , blocks       :: !(BlockMap)
+  , bucket       :: !(InputBucket m)
   }
+
+instance NFData (RenderState m) where
+  rnf (RenderState a b c d) = a `seq` b `seq` c `seq` d `deepseq` ()
+
+type RenderConduit m = ConduitM () Builder (StateT (RenderState m) (ExceptT StrapError m))
+type RenderSource m = RenderConduit m ()
 
 instance (Monad m) => MonadError StrapError (RenderT m) where
     throwError = RenderT . throwError
@@ -79,13 +86,24 @@ data ParsedPiece = ParsedPiece Piece SourcePos
   
 class Renderable a where
   renderOutput :: RenderConfig -> a -> Output
-  
+
+data InputBucket m = InputBucket [(M.Map String (Input m))]
+
+instance NFData (InputBucket m) where
+  rnf (InputBucket l) = rnf l
+  rnf a = a `seq` ()
+
 data Input m = forall a . (Renderable a) => RenderVal a
              | List [Input m]
-             | Func  (Literal -> RenderT m Literal)
+             | Func  (Literal -> StateT (RenderState m) (ExceptT StrapError m) Literal)
              | LitVal Literal
 
-data Literal = forall a . (Typeable a, Renderable a) => LitDyn !a
+instance NFData (Input m) where
+  rnf (List l) = rnf l
+  rnf (LitVal v) = rnf v
+  rnf a = a `seq` ()
+
+data Literal = forall a . (Typeable a, NFData a, Renderable a) => LitDyn !a
              | LitText Text
              | LitSafe Text
              | LitInteger Integer
@@ -95,8 +113,14 @@ data Literal = forall a . (Typeable a, Renderable a) => LitDyn !a
              | LitBool Bool
              | LitEmpty
 
+instance NFData Literal where
+  rnf (LitList l) = rnf l
+  rnf (LitInteger i) = rnf i
+  rnf (LitDyn a) = rnf a
+  rnf a = a `seq` ()
+
 class Block a where
-  process :: (MonadIO m) => a -> RenderT m Output
+  process :: (MonadIO m) => a -> RenderSource m 
 
 class Booly a where
   toBool :: a -> Bool
@@ -129,7 +153,6 @@ data StrapError = StrapError String  SourcePos
                 | TemplateNotFound String  SourcePos
   deriving (Show, Eq)
 
-data InputBucket m = InputBucket [(M.Map String (Input m))]
 
 type TemplateStore = String -> IO (Maybe Template)
 
