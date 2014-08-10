@@ -78,7 +78,7 @@ parseRaw = do
   tag (string "raw") <?> "Raw tag"
   c <- anyChar
   s <- manyTill anyChar (tryTag (string "endraw"))
-  return $ ParsedPiece (StaticPiece (B.fromString $ c:s)) pos
+  return $ ParsedPiece (StaticPiece (T.pack $ c:s)) pos
 
 parseComment :: GenParser Char st ParsedPiece
 parseComment = do
@@ -183,7 +183,7 @@ parseStatic = do
   pos <- getPosition
   c <- anyChar
   s <- manyTill anyChar (peekChar '{' <|> peekChar '$' <|> eof)
-  return $ ParsedPiece (StaticPiece (B.fromString $ c:s)) pos
+  return $ ParsedPiece (StaticPiece (T.pack $ c:s)) pos
 
 parseNonStatic :: GenParser Char st ParsedPiece
 parseNonStatic =  try parseComment

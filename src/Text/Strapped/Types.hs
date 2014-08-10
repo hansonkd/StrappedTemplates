@@ -41,14 +41,15 @@ data RenderState m = RenderState
 instance NFData (RenderState m) where
   rnf (RenderState a b c d) = a `seq` b `seq` c `seq` d `deepseq` ()
 
-type RenderConduit m = ConduitM () Builder (StateT (RenderState m) (ExceptT StrapError m))
+type RenderM m = StateT (RenderState m) (ExceptT StrapError m)
+type RenderConduit m = ConduitM () Output (RenderM m)
 type RenderSource m = RenderConduit m ()
 
 instance (Monad m) => MonadError StrapError (RenderT m) where
     throwError = RenderT . throwError
     catchError (RenderT m) f = RenderT (catchError m (runRenderT . f))
     
-type Output = Builder
+type Output = T.Text
 type BlockMap = M.Map String [ParsedPiece]
 
 instance Show Builder where
@@ -60,6 +61,12 @@ data Expression =
   ListExpression [ParsedExpression] |
   Multipart [ParsedExpression]
 
+instance NFData Expression where
+  rnf (LookupExpression s) = rnf s
+  rnf (LiteralExpression l) = rnf l
+  rnf (ListExpression l) = rnf l
+  rnf (Multipart l) = rnf l
+
 instance Show Expression where
   show (LookupExpression s) = s
   show (LiteralExpression s) = show s
@@ -67,6 +74,9 @@ instance Show Expression where
   show (Multipart l) = mconcat $ map show l
 
 data ParsedExpression = ParsedExpression Expression SourcePos
+
+instance NFData ParsedExpression where
+  rnf (ParsedExpression a b) = a `deepseq` b `seq` ()
 
 instance Show ParsedExpression where
   show (ParsedExpression exp _) = show exp
@@ -81,13 +91,26 @@ data Piece = StaticPiece Output
            | Inherits String BlockMap
            deriving (Show)
 
+instance NFData Piece where
+  rnf (StaticPiece a) = a `seq` ()
+  rnf (BlockPiece a b) = a `deepseq` b `deepseq` ()
+  rnf (ForPiece a b c) = a `deepseq` b `deepseq` c `deepseq`()
+  rnf (IfPiece a b c) = a `deepseq` b `deepseq` c `deepseq`()
+  rnf (FuncPiece a) = a `deepseq` ()
+  rnf (Decl s a) = s `deepseq` a `deepseq` ()
+  rnf (Include s) = s `deepseq` ()
+  rnf (Inherits s b) = s `deepseq` b `deepseq` ()
+
 data ParsedPiece = ParsedPiece Piece SourcePos
   deriving (Show)
+
+instance NFData ParsedPiece where
+  rnf (ParsedPiece p s) = p `deepseq` s `seq` ()
   
 class Renderable a where
   renderOutput :: RenderConfig -> a -> Output
 
-data InputBucket m = InputBucket [(M.Map String (Input m))]
+data InputBucket m = InputBucket (M.Map String (Input m))
 
 instance NFData (InputBucket m) where
   rnf (InputBucket l) = rnf l
@@ -95,7 +118,7 @@ instance NFData (InputBucket m) where
 
 data Input m = forall a . (Renderable a) => RenderVal a
              | List [Input m]
-             | Func  (Literal -> StateT (RenderState m) (ExceptT StrapError m) Literal)
+             | Func  (Literal -> (ExceptT StrapError m) Literal)
              | LitVal Literal
 
 instance NFData (Input m) where
