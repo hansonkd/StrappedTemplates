@@ -11,8 +11,8 @@ import           Control.Applicative
 import Control.Monad.Except
 import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.List  as L (intersperse, null)
-import qualified Data.Map as M
-import Control.Monad.State
+import qualified Data.Map.Strict as M
+import Control.Monad.State.Strict
 import Control.Monad.Writer
 import Data.Monoid (mconcat)
 import Data.Text as T (Text, null, unpack)
@@ -86,13 +86,13 @@ data Input m = forall a . (Renderable a) => RenderVal a
              | LitVal Literal
 
 data Literal = forall a . (Typeable a, Renderable a) => LitDyn !a
-             | LitText Text
-             | LitSafe Text
-             | LitInteger Integer
-             | LitDouble Double
-             | LitBuilder Builder
-             | LitList [Literal]
-             | LitBool Bool
+             | LitText !Text
+             | LitSafe !Text
+             | LitInteger !Integer
+             | LitDouble !Double
+             | LitBuilder !Builder
+             | LitList ![Literal]
+             | LitBool !Bool
              | LitEmpty
 
 class Block a where

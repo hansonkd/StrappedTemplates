@@ -10,7 +10,7 @@ import Data.Either
 import Data.Time
 
 makeBucket :: Integer -> InputBucket IO
-makeBucket i = varBucket "is" $ List $ map (LitVal . LitInteger) [1..i]
+makeBucket i = bucketFromList [("is", List $ map (LitVal . LitInteger) [1..i]), ("i", LitVal $ LitInteger 1)]
 
 benchmarks st = map (\i -> bench (show i) $ nfIO $ do {e <- (liftM (fmap (B.toByteString)) $ render st (makeBucket i) "big-simple.strp"); either (const $ return mempty) return e}) [100,200..1000]
 
