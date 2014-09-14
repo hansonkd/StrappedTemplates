@@ -1,11 +1,23 @@
 module Text.Strapped.Parser
   ( parseTemplate
+  -- * Building custom template parsers
+  , parseExpression
+  , parseContent
+  , tagStart
+  , tagEnd
+  , peekTag
+  , tryTag
+  , tag
+  , wordString
+  , pathString
+  , peekChar
   ) where
 
 import Control.Applicative ((<*>))
 import Control.Monad
 import Data.Monoid
-import qualified Data.Text.Lazy as T
+import qualified Data.Map.Strict as M
+import qualified Data.Text as T
 import Blaze.ByteString.Builder as B
 import Blaze.ByteString.Builder.Char.Utf8 as B
 import Text.Parsec
@@ -13,94 +25,98 @@ import Text.Parsec.String
 import qualified Text.Parsec.Token as P
 import Text.Parsec.Language (emptyDef)
 import Text.Strapped.Types
+import Text.Strapped.Render hiding (getState)
 
-
-tagStart :: GenParser Char st String
+-- | Parse the beginning of a tag
+tagStart :: ParserM String
 tagStart = string "{$"
 
-tagEnd :: GenParser Char st String
+-- | Parse the end of a tag.
+tagEnd :: ParserM String
 tagEnd = string "$}"
 
-wordString :: GenParser Char st String
+-- | Parse alpha-numeric characters and '_'
+wordString :: ParserM String
 wordString = many1 $ oneOf "_" <|> alphaNum
 
-pathString :: GenParser Char st String
+-- | Parse alpha-numeric characters and '_./'
+pathString :: ParserM String
 pathString = many1 $ oneOf "_./" <|> alphaNum
 
-peekChar :: Char -> GenParser Char st ()
+-- | Look at a character but don't consume
+peekChar :: Char -> ParserM ()
 peekChar = void . try . lookAhead . char
 
+-- | Look at a tag but don't consume
+peekTag :: ParserM a -> ParserM ()
 peekTag = void . try . lookAhead . tag
 
-tryTag :: GenParser Char st a -> GenParser Char st ()
+-- | Try a tag and consume if it matches
+tryTag :: ParserM  a -> ParserM ()
 tryTag = void . try . tag
 
-tag :: GenParser Char st a -> GenParser Char st a
+-- | Parse content between `tagStart` and `tagEnd`
+tag :: ParserM a -> ParserM a
 tag p = between (tagStart >> spaces) (spaces >> tagEnd) p <?> "Tag"
 
-parseFloat :: GenParser Char st Double
+parseFloat :: ParserM Double
 parseFloat = do sign <- option 1 (do s <- oneOf "+-"
                                      return $ if s == '-' then-1.0 else 1.0)
                 x    <- P.float $ P.makeTokenParser emptyDef
                 return $ sign * x
 
-parseInt :: GenParser Char st Integer
+parseInt :: ParserM Integer
 parseInt = do sign <- option 1 (do s <- oneOf "+-"
                                    return $ if s == '-' then-1 else 1)
               x    <- P.integer $ P.makeTokenParser emptyDef
               return $ sign * x
 
-parseContent :: GenParser Char st a -> GenParser Char st [ParsedPiece]
+parseContent :: ParserM a -> ParserM [ParsedPiece]
 parseContent end = do
-  decls <- many (try $ spaces >> parseDecl)
+  decls <- many (try $ spaces >> parseWithPos parseDecl)
   spaces
   extends <- optionMaybe (try $ spaces >> parseInherits)
   case (extends) of
     Just (e, epos) -> do
       includes <- manyTill parseIsIgnoreSpace end
-      return $ (decls) ++ [ParsedPiece (Inherits e includes) epos]
+      return $ (decls) ++ [ParsedPiece (Inherits e (M.fromList includes)) epos]
     _     -> do
       ps <- manyTill parsePiece end
       return $ decls ++ ps
   where parseIsIgnoreSpace = do {spaces; b <- parseIsBlock; spaces; return b}
 
-parseBlock :: GenParser Char st ParsedPiece
+parseBlock :: ParserM Piece
 parseBlock = do
-  pos <- getPosition
   blockName <- tag (string "block" >> spaces >> wordString) <?> "Block tag"
   blockContent <- parseContent (tryTag $ string "endblock") 
-  return $ ParsedPiece (BlockPiece blockName blockContent) pos
+  return $ (BlockPiece blockName blockContent)
 
-parseRaw :: GenParser Char st ParsedPiece
+parseRaw :: ParserM Piece
 parseRaw = do
-  pos <- getPosition
   tag (string "raw") <?> "Raw tag"
   c <- anyChar
   s <- manyTill anyChar (tryTag (string "endraw"))
-  return $ ParsedPiece (StaticPiece (B.fromString $ c:s)) pos
+  return $ StaticPiece (B.fromString $ c:s)
 
-parseComment :: GenParser Char st ParsedPiece
+parseComment :: ParserM Piece
 parseComment = do
-  pos <- getPosition
   tag (string "comment") <?> "Comment tag"
   c <- anyChar
   s <- manyTill anyChar (tryTag (string "endcomment"))
-  return $ ParsedPiece (StaticPiece mempty) pos
+  return $ StaticPiece mempty
 
-parseIf :: GenParser Char st ParsedPiece
+parseIf :: ParserM Piece
 parseIf = do
-  pos <- getPosition
   exp <- (tagStart >> spaces >> string "if" >> spaces >> parseExpression (try $ spaces >> tagEnd)) <?> "If tag"
   positive <- parseContent ((peekTag $ string "endif") <|> (tryTag $ string "else"))
   negative <- parseContent (tryTag $ string "endif")
-  return $ ParsedPiece (IfPiece exp positive negative) pos
+  return $ IfPiece exp positive negative
 
-parseFor :: GenParser Char st ParsedPiece
+parseFor :: ParserM Piece
 parseFor = do
-  pos <- getPosition
   (newVarName, exp) <- (tagStart >> spaces >> string "for" >> argParser) <?> "For tag"
   blockContent <- parseContent (tryTag $ string "endfor") 
-  return $ ParsedPiece (ForPiece newVarName exp blockContent) pos
+  return $ ForPiece newVarName exp blockContent
   where argParser = do 
         spaces
         v <- wordString
@@ -108,42 +124,41 @@ parseFor = do
         func <- parseExpression (try $ spaces >> tagEnd)
         return (v, func)
 
-parseDecl :: GenParser Char st ParsedPiece
+parseDecl :: ParserM Piece
 parseDecl = do {spaces; decl <- parserDecl; spaces; return decl} <?> "Let tag"
   where parserDecl = do
-          pos <- getPosition
           tagStart >> spaces
           string "let" >> spaces
           varName <- wordString
           spaces >> string "=" >> spaces
           func <- parseExpression (try $ spaces >> tagEnd)
-          return $ ParsedPiece (Decl varName func) pos
+          return $ Decl varName func
           
 parseIsBlock = do
       blockName <- tag (string "isblock" >> spaces >> wordString) <?> "Isblock tag"
       blockContent <- parseContent (tryTag $ string "endisblock") 
       return (blockName, blockContent)
 
-parseInclude :: GenParser Char st ParsedPiece
+parseInclude :: ParserM Piece
 parseInclude = do
-  pos <- getPosition
-  tag (parserInclude pos) <?> "Include tag"
-  where parserInclude pos = do
+  tag parserInclude <?> "Include tag"
+  where parserInclude = do
                 string "include" >> spaces
                 includeName <- pathString
-                return $ ParsedPiece (Include includeName) pos
+                return $ Include includeName
 
 parseInherits = do {pos <- getPosition; mtag <- tag (string "inherits" >> spaces >> pathString); return (mtag, pos)} <?> "Inherits tag"
 
-parseFunc ::  GenParser Char st ParsedPiece
+parseFunc ::  ParserM Piece
 parseFunc = parserFunc <?> "Call tag"
   where parserFunc = do
           pos <- getPosition
           string "${" >> spaces
           exp <- parseExpression (try $ spaces >> string "}")
-          return $ ParsedPiece (FuncPiece exp) pos
+          return $ FuncPiece exp
 
-parseExpression ::  GenParser Char st a -> GenParser Char st ParsedExpression
+-- | Parse an expression that produces a `Literal`
+parseExpression ::  ParserM a -> ParserM ParsedExpression
 parseExpression end = manyPart <?> "Expression"
   where parseGroup = try parens <|> parseAtomic
         parseAtomic  = do
@@ -169,7 +184,7 @@ parseExpression end = manyPart <?> "Expression"
         parseBool = (try $ string "True" >> return True) <|> (try $ string "False" >> return False)
         literal = wordString >>= (return . LookupExpression)
 
-parseStringContents ::  Char -> GenParser Char st String
+parseStringContents ::  Char -> ParserM String
 parseStringContents esc = between (char esc) (char esc) (many chars)
     where chars = (try escaped) <|> noneOf [esc]
           escaped = char '\\' >> choice (zipWith escapedChar codes replacements)
@@ -177,14 +192,13 @@ parseStringContents esc = between (char esc) (char esc) (many chars)
           codes        = ['b',  'n',  'f',  'r',  't',  '\\', '\"', '\'', '/']
           replacements = ['\b', '\n', '\f', '\r', '\t', '\\', '\"', '\'', '/']
 
-parseStatic :: GenParser Char st ParsedPiece
+parseStatic :: ParserM Piece
 parseStatic = do
-  pos <- getPosition
   c <- anyChar
   s <- manyTill anyChar (peekChar '{' <|> peekChar '$' <|> eof)
-  return $ ParsedPiece (StaticPiece (B.fromString $ c:s)) pos
+  return $ StaticPiece (B.fromString $ c:s)
 
-parseNonStatic :: GenParser Char st ParsedPiece
+parseNonStatic :: ParserM Piece
 parseNonStatic =  try parseComment
               <|> try parseRaw
               <|> try parseBlock
@@ -192,18 +206,26 @@ parseNonStatic =  try parseComment
               <|> try parseFor
               <|> try parseInclude
               <|> parseFunc
-              
-parsePiece :: GenParser Char st ParsedPiece
-parsePiece = (try parseNonStatic <|> parseStatic)
 
-parsePieces :: GenParser Char st [ParsedPiece]
+parsePiece :: ParserM ParsedPiece
+parsePiece = do
+    parsers <- liftM customParsers getState 
+    foldr (\(BlockParser p) acc -> try (parseWithPos p) <|> acc) base_parser parsers
+    where base_parser = parseWithPos (try parseNonStatic <|> parseStatic)
+
+parseWithPos :: (Block a) => ParserM a -> ParserM ParsedPiece
+parseWithPos p = do
+  pos <- getPosition
+  v <- p
+  return $ ParsedPiece v pos
+
+parsePieces :: ParserM [ParsedPiece]
 parsePieces = parseContent eof
 
-parseToTemplate :: GenParser Char st Template
+parseToTemplate :: ParserM Template
 parseToTemplate = (parseContent eof) >>= (return . Template)
 
--- | Take a template body and a template name and return either an error or a
+-- | Take config, a template body and a template name and return either an error or a
 --   renderable template.
-
-parseTemplate :: String -> String -> Either ParseError Template
-parseTemplate s tmplN = parse parseToTemplate tmplN s
+parseTemplate :: StrappedConfig -> String -> String -> Either ParseError Template
+parseTemplate config s tmplN = runParser parseToTemplate config tmplN s

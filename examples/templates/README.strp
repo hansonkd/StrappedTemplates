@@ -6,11 +6,11 @@ General Purpose Templates in Haskell.
 Objective
 =========
 
-The objective of this project is to build an easy-to-use, flexible, general purpose, performant templating language. 
+The objective of this project is to build an easy-to-use, flexible, general purpose templating language. 
 
 Strapped isn't necessarily geared towards HTML. For example, this README and cabal file is written in Strapped (see `examples/templates/README.strp` and `examples/make_readme.hs`).
 
-There is still a lot of work to do. I want to simplify the types of inputs and function variables since as of now you have to pack primitives inside if Literals and then pattern match them. 
+As of `0.2` Strapped now accepts custom parsers and template tags as part of the `StrappedConfig` object. 
 
 Quick Start
 ===========
@@ -231,9 +231,20 @@ Here is an example of using inheritence at different levels:
 ```
 {$ endraw $}
 
+Extending the template language with custom parsers and blocks
+==============================================================
+
+Strapped lets you define custom parsers to use to parse and render. You have to define both how to parse your data out of a template with Parsec and how to process it when it is rendered.
+
+Theoretically this means you can build an entirely new template syntax within Strapped.
+
+```haskell
+${ fromFile "examples/custom_parser.hs" }
+```
+
+
+
 Speed
 =====
 
-Strapped preloads and tokenizes your templates before render time. This results in overall good performance. It is about as fast as Blaze-Html in normal linear templates. Agravating the garbage collection and doing large loops inside loops slows it down about 2x slower than Blaze-Html, which is still pretty fast. It is significantly (orders of magnitude) faster than interpreted templates like Django, Interpreted-Heist and Hastache. One of the biggest areas I found that impacted performance was the `InputBucket m` type. Originally I had an `InputBucket m` simply be a function, but I found that excluding highly nested loops, the list of maps works faster in general.
-
-I haven't spent spent much time optimizing so there is still room for improvement. Feel free to run the benchmarks or optimize them more.
+Speed has taken a backseat to usability at this point in development.

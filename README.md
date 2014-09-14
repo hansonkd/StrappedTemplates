@@ -6,11 +6,11 @@ General Purpose Templates in Haskell.
 Objective
 =========
 
-The objective of this project is to build an easy-to-use, flexible, general purpose, performant templating language. 
+The objective of this project is to build an easy-to-use, flexible, general purpose templating language. 
 
 Strapped isn't necessarily geared towards HTML. For example, this README and cabal file is written in Strapped (see `examples/templates/README.strp` and `examples/make_readme.hs`).
 
-There is still a lot of work to do. I want to simplify the types of inputs and function variables since as of now you have to pack primitives inside if Literals and then pattern match them. 
+As of `0.2` Strapped now accepts custom parsers and template tags as part of the `StrappedConfig` object. 
 
 Quick Start
 ===========
@@ -36,7 +36,7 @@ ${ takesAList ["string", 1, 1.0, [True, zeroArityFunc, lookupVar], (someFunc Fal
 ```
 
 
-### Example
+## Example
 
 Here is an example of the tags being used together:
 
@@ -80,21 +80,21 @@ The easiest way to create a template store is to use one of the built in functio
 ```haskell
 import Control.Monad.IO.Class
 import qualified Blaze.ByteString.Builder as B
-import qualified Data.Text.Lazy as T
+import qualified Data.Text as T
 import Data.Time
 
 import Text.Strapped
 
 makeBucket :: Integer -> InputBucket IO
 makeBucket i = bucketFromList 
-      [ ("is", List $ map (LitVal . LitInteger) [1..i])
-      , ("is_truthy", LitVal $ LitInteger i)
+      [ ("is", lit $ map (LitInteger) [1..i])
+      , ("is_truthy", lit i)
       , ("ioTime", Func (\_ -> (liftIO $ getCurrentTime) >>= (\c -> return $ LitText $ T.pack $ show c)))
       ]
 
 main :: IO ()
 main = do
-  tmpls <- templateStoreFromDirectory "examples/templates" ".strp"
+  tmpls <- templateStoreFromDirectory defaultConfig "examples/templates" ".strp"
   case tmpls of
     Left err -> print err
     Right store -> do
@@ -275,9 +275,53 @@ Here is an example of using inheritence at different levels:
 ```
 
 
+Extending the template language with custom parsers and blocks
+==============================================================
+
+Strapped lets you define custom parsers to use to parse and render. You have to define both how to parse your data out of a template with Parsec and how to process it when it is rendered.
+
+Theoretically this means you can build an entirely new template syntax within Strapped.
+
+```haskell
+
+import Blaze.ByteString.Builder.Char8
+import Data.Monoid ((<>))
+import Data.Text as T
+import Text.Strapped
+import Text.Strapped.Render
+import Text.Strapped.Parser
+import Text.Parsec
+import Text.Parsec.String
+
+data MyData = MyData ParsedExpression
+    deriving (Show)
+
+-- | Process MyData in the RenderT monad when it is rendered.
+instance Block MyData where
+    process (MyData ex) = do
+        config <- getConfig
+        lit <- reduceExpression ex
+        return $ fromString "MyData ->" <> (renderOutput config lit) <> fromString "<- MyData"
+
+-- | Parse out MyData using Parsec
+parseMyData :: ParserM MyData
+parseMyData = do
+    tagStart >> spaces >> (string "MyData") >> spaces >> parseExpression (spaces >> tagEnd) >>= (return . MyData)
+
+main :: IO ()
+main = do
+    
+    case templateStoreFromList config [("mydata", "testing... {$ MyData lookup $}")] of
+        Left e -> print e
+        Right ts -> do
+            r <- render (config {templateStore = ts}) (varBucket "lookup" $ LitVal $ LitText $ T.pack "Cooolio") "mydata"
+            print r
+    where config = defaultConfig {customParsers = [BlockParser parseMyData]}
+```
+
+
+
 Speed
 =====
 
-Strapped preloads and tokenizes your templates before render time. This results in overall good performance. It is about as fast as Blaze-Html in normal linear templates. Agravating the garbage collection and doing large loops inside loops slows it down about 2x slower than Blaze-Html, which is still pretty fast. It is significantly (orders of magnitude) faster than interpreted templates like Django, Interpreted-Heist and Hastache. One of the biggest areas I found that impacted performance was the `InputBucket m` type. Originally I had an `InputBucket m` simply be a function, but I found that excluding highly nested loops, the list of maps works faster in general.
-
-I haven't spent spent much time optimizing so there is still room for improvement. Feel free to run the benchmarks or optimize them more.
+Speed has taken a backseat to usability at this point in development.

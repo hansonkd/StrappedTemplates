@@ -1,17 +1,19 @@
 import Control.Monad
+import Data.Monoid
 import Control.Monad.IO.Class
 import Text.Strapped
 import Criterion.Main
 import qualified Blaze.ByteString.Builder as B
-import qualified Data.Text.Lazy as T
+import qualified Data.Text as T
 import Text.ParserCombinators.Parsec
-
+import Data.Either
 import Data.Time
 
 makeBucket :: Integer -> InputBucket IO
-makeBucket i = varBucket "is" $ List $ map (LitVal . LitInteger) [1..i]
+makeBucket i = bucketFromList [("is", lit $ map (LitInteger) [1..i]), 
+                               ("i", LitVal $ LitInteger 1)]
 
-benchmarks st = map (\i -> bench (show i) $ whnfIO $ (liftM (fmap (B.toByteString)) $ render st (makeBucket i) "big-simple.strp")) [100,200..1000]
+benchmarks st = map (\i -> bench (show i) $ nfIO $ do {e <- (liftM (fmap (B.toByteString)) $ render st (makeBucket i) "big-simple.strp"); either (const $ return mempty) return e}) [100,200..1000]
 
 main :: IO ()
 main = do
