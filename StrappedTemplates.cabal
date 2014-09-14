@@ -1,5 +1,5 @@
 name:                StrappedTemplates
-version:             0.1.1.0
+version:             0.2.0.0
 synopsis:            General purpose templates in haskell
 homepage:            https://github.com/hansonkd/StrappedTemplates
 license:             BSD3
@@ -14,21 +14,21 @@ description:
   .
   >  import Control.Monad.IO.Class
   >  import qualified Blaze.ByteString.Builder as B
-  >  import qualified Data.Text.Lazy as T
+  >  import qualified Data.Text as T
   >  import Data.Time
   >  
   >  import Text.Strapped
   >  
   >  makeBucket :: Integer -> InputBucket IO
   >  makeBucket i = bucketFromList 
-  >        [ ("is", List $ map (LitVal . LitInteger) [1..i])
-  >        , ("is_truthy", LitVal $ LitInteger i)
+  >        [ ("is", lit $ map (LitInteger) [1..i])
+  >        , ("is_truthy", lit i)
   >        , ("ioTime", Func (\_ -> (liftIO $ getCurrentTime) >>= (\c -> return $ LitText $ T.pack $ show c)))
   >        ]
   >  
   >  main :: IO ()
   >  main = do
-  >    tmpls <- templateStoreFromDirectory "examples/templates" ".strp"
+  >    tmpls <- templateStoreFromDirectory defaultConfig "examples/templates" ".strp"
   >    case tmpls of
   >      Left err -> print err
   >      Right store -> do
@@ -78,7 +78,7 @@ library
 
 test-suite Main
   type:            exitcode-stdio-1.0
-  build-depends:   StrappedTemplates >= 0.1 && < 0.2,
+  build-depends:   StrappedTemplates >= 0.2 && < 0.3,
                    base >= 4.7 && < 4.8, 
                    hspec >= 1.11 && < 1.12,
                    text >= 1.0 && < 1.2,

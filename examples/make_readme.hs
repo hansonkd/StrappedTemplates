@@ -3,8 +3,8 @@
 import Control.Monad.IO.Class
 import qualified Blaze.ByteString.Builder as B
 import qualified Data.ByteString as BS
-import qualified Data.Text.Lazy as T
-import qualified Data.Text.Lazy.IO as T
+import qualified Data.Text as T
+import qualified Data.Text.IO as T
 import Data.Time
 
 import Text.Strapped
@@ -23,7 +23,7 @@ readLines _ = return LitEmpty
 
 main :: IO ()
 main = do
-  tmpls <- templateStoreFromDirectory "examples/templates" ".strp"
+  tmpls <- templateStoreFromDirectory defaultConfig "examples/templates" ".strp"
   case tmpls of
     Left err -> print err
     Right store -> do

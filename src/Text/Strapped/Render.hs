@@ -9,10 +9,18 @@ module Text.Strapped.Render
   , emptyBucket
   , render
   , defaultConfig
+  -- * Building Custom Tags
+  , reduceExpression
+  , putBucket
+  , getBucket
+  , getConfig
+  , getState
+  , putState
   ) where
 
 import Blaze.ByteString.Builder
 import Blaze.ByteString.Builder.Char.Utf8
+import Blaze.ByteString.Builder.Int
 import Control.Monad
 import qualified Data.Map.Strict as M
 import Data.Foldable (foldlM)
@@ -33,9 +41,9 @@ instance Renderable Builder where
   renderOutput _ = id
 
 instance Renderable Literal where
-  renderOutput (RenderConfig _ ef) (LitText s) = fromText $ ef s
+  renderOutput (StrappedConfig _ _ ef) (LitText s) = fromText $ ef s
   renderOutput _ (LitSafe s)     = fromText s
-  renderOutput rc (LitInteger i) = fromShow i
+  renderOutput _ (LitInteger i)  = fromShow i
   renderOutput rc (LitDouble i)  = fromShow i
   renderOutput rc (LitBool i)    = fromShow i
   renderOutput _ (LitBuilder b)  = b
@@ -43,10 +51,11 @@ instance Renderable Literal where
                                    (mconcat $ intersperse (fromChar ',') (map (renderOutput rc) l)) <> 
                                    (fromChar ']')
   renderOutput rc (LitDyn r) = renderOutput rc r
+  {-# INLINE renderOutput #-}
   
 -- | Default render configuration. No text escaping.
-defaultConfig :: RenderConfig
-defaultConfig = RenderConfig (\_ -> return Nothing) id
+defaultConfig :: StrappedConfig
+defaultConfig = StrappedConfig [] (\_ -> return Nothing) id
 
 -- | Basic bucket. Matches on string and return input. Returns Nothing for
 --   everything else.
@@ -71,20 +80,10 @@ bucketFromList :: [(String, Input m)] -> InputBucket m
 bucketFromList l = InputBucket [M.fromList l]
 {-# INLINE bucketFromList #-}   
 
-{-
-combineBuckets (InputBucket a) (InputBucket b) = InputBucket $ M.union a b
-
-emptyBucket = InputBucket M.empty
-
-bucketLookup v (InputBucket a) = M.lookup v a
-
-bucketFromList = InputBucket . M.fromList
--}
-
 getOrThrow :: (Monad m) => String -> RenderT m (Input m)
 getOrThrow v = do
   getter <- getBucket
-  maybe (getPos >>= (\pos -> throwError $ InputNotFound v pos)) return (bucketLookup v getter)
+  maybe (throwError $ InputNotFound v) return (bucketLookup v getter)
 
 {-# INLINE getOrThrow #-}
 
@@ -104,8 +103,6 @@ reduceExpression (ParsedExpression exp pos) = convert exp
             val <- getOrThrow f
             inputToLiteral val
         inputToLiteral inp = case inp of
-                    (List args) -> mapM inputToLiteral args >>= (return . LitList)
-                    (RenderVal r) -> getConfig >>= (\c -> return $ LitBuilder (renderOutput c r))
                     (Func f) -> f LitEmpty
                     (LitVal v) -> return v
 
@@ -125,7 +122,7 @@ getBucket :: Monad m => RenderT m (InputBucket m)
 getBucket = liftM bucket getState
 {-# INLINE getBucket #-}
 
-getConfig :: Monad m => RenderT m RenderConfig
+getConfig :: Monad m => RenderT m StrappedConfig
 getConfig = liftM renderConfig getState
 {-# INLINE getConfig #-}   
 
@@ -138,8 +135,11 @@ putBlocks a = RenderT $ lift $  modify (\i -> i { blocks=a })
 getState :: Monad m => RenderT m (RenderState m)
 getState = RenderT $ get
 
+putState :: Monad m => RenderState m -> RenderT m ()
+putState = RenderT . put
+
 throwParser :: (Monad m) => String -> RenderT m b
-throwParser s = getPos >>= (\pos -> throwError $ StrapError s pos) 
+throwParser s = throwError $ StrapError s 
 
 instance Block Piece where
   process (StaticPiece s) = return s
@@ -151,7 +151,8 @@ instance Block Piece where
     curState <- getState
     curBucket <- getBucket
     ret <- case var of 
-      LitList l -> foldlM (\acc obj -> buildContent c >>= return . (<>) acc ) mempty l
+      LitList l -> foldlM (\acc obj -> putBucket (combineBuckets (varBucket n $ LitVal obj) curBucket) >> 
+                                       buildContent c >>= return . (<>) acc) mempty l
       _ -> throwParser $ "`" ++ show exp ++ "` is not a LitList"
     putBucket curBucket
     return ret
@@ -164,7 +165,7 @@ instance Block Piece where
   process (Inherits n b) = do
       tmplStore <- liftM templateStore getConfig
       mtmpl <- liftIO (tmplStore n)
-      maybe (getPos >>= (\pos -> throwError (TemplateNotFound n pos)))
+      maybe (throwError (TemplateNotFound n))
                  (\(Template c) -> do 
                       curBlocks <- getBlocks
                       putBlocks $ M.union b curBlocks
@@ -175,7 +176,7 @@ instance Block Piece where
   process (Include n) = do
     tmplStore <- liftM templateStore getConfig
     mtmpl <- liftIO (tmplStore n)
-    maybe (getPos >>= (\pos -> throwError (TemplateNotFound n pos)))
+    maybe (throwError (TemplateNotFound n))
           (\(Template c) -> buildContent c)
           mtmpl
   process (Decl n exp) = do
@@ -189,13 +190,12 @@ instance Block Piece where
     return $ renderOutput config val
       
 -- buildContent pieces accum = forM_ pieces (\(ParsedPiece piece pos) -> putPos pos >> process piece accum)
-buildContent pieces = foldlM (\acc (ParsedPiece piece pos) -> (process piece) >>= return . (<>) acc ) mempty pieces
-{-# INLINE buildContent #-}   
+buildContent pieces = foldlM (\acc (ParsedPiece piece pos) -> (process piece) `catchError` (\e -> throwError $ PositionedError e pos) >>= return . (<>) acc ) mempty pieces
 
-render :: (MonadIO m) => RenderConfig -> InputBucket m -> String -> m (Either StrapError Output)
+render :: (MonadIO m) => StrappedConfig -> InputBucket m -> String -> m (Either StrapError Output)
 render renderConfig !getter' tmplName = do
       tmpl <- liftIO $ tmplStore tmplName
-      maybe (return $ Left $ TemplateNotFound tmplName (initialPos tmplName)) 
+      maybe (return $ Left $ TemplateNotFound tmplName) 
             (\(Template c) -> (flip evalStateT startState $ runExceptT $ runRenderT $ buildContent c))
             tmpl
             

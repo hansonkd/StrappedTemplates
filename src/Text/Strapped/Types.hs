@@ -3,10 +3,13 @@
 {-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Text.Strapped.Types where
 
 import Blaze.ByteString.Builder
+import Blaze.ByteString.Builder.Char8 hiding (fromString)
 import           Control.Applicative
 import Control.Monad.Except
 import qualified Data.ByteString.Lazy.Char8 as BS
@@ -15,10 +18,13 @@ import qualified Data.Map.Strict as M
 import Control.Monad.State.Strict
 import Control.Monad.Writer
 import Data.Monoid (mconcat)
-import Data.Text as T (Text, null, unpack)
+import Data.Text as T (Text, pack, null, unpack)
 import Data.Typeable
+import Data.String
 import Text.Parsec.Pos
 
+import Text.Parsec
+import Text.Parsec.String
 
 -- | RenderT m
 --
@@ -32,7 +38,7 @@ instance MonadTrans RenderT where
   
 data RenderState m = RenderState
   { position     :: SourcePos
-  , renderConfig :: RenderConfig
+  , renderConfig :: StrappedConfig
   , blocks       :: BlockMap
   , bucket       :: InputBucket m
   }
@@ -74,15 +80,16 @@ data Piece = StaticPiece Output
            | Inherits String BlockMap
            deriving (Show)
 
-data ParsedPiece = ParsedPiece Piece SourcePos
-  deriving (Show)
+data ParsedPiece = forall a . (Block a) => ParsedPiece a SourcePos
+
+instance Show ParsedPiece where
+  show (ParsedPiece a b) = show b
   
 class Renderable a where
-  renderOutput :: RenderConfig -> a -> Output
+  renderOutput :: StrappedConfig -> a -> Output
+
   
-data Input m = forall a . (Renderable a) => RenderVal a
-             | List [Input m]
-             | Func  (Literal -> RenderT m Literal)
+data Input m = Func  (Literal -> RenderT m Literal)
              | LitVal Literal
 
 data Literal = forall a . (Typeable a, Renderable a) => LitDyn !a
@@ -94,6 +101,33 @@ data Literal = forall a . (Typeable a, Renderable a) => LitDyn !a
              | LitList ![Literal]
              | LitBool !Bool
              | LitEmpty
+
+class ToLiteral a where
+  toLiteral :: a -> Literal
+
+instance ToLiteral Text where
+  toLiteral = LitText
+
+instance ToLiteral Integer where
+  toLiteral = LitInteger
+
+instance ToLiteral Double where
+  toLiteral = LitDouble
+
+instance ToLiteral Builder where
+  toLiteral = LitBuilder
+
+instance ToLiteral [Literal] where
+  toLiteral = LitList
+
+instance ToLiteral Bool where
+  toLiteral = LitBool
+
+instance ToLiteral String where
+  toLiteral = LitText . T.pack
+
+instance IsString Literal where
+   fromString = toLiteral
 
 class Block a where
   process :: (MonadIO m) => a -> RenderT m Output
@@ -124,9 +158,10 @@ instance Show Literal where
   show LitEmpty = ""
 
 
-data StrapError = StrapError String  SourcePos 
-                | InputNotFound String  SourcePos 
-                | TemplateNotFound String  SourcePos
+data StrapError = StrapError String
+                | InputNotFound String
+                | TemplateNotFound String
+                | PositionedError StrapError SourcePos
   deriving (Show, Eq)
 
 data InputBucket m = InputBucket [(M.Map String (Input m))]
@@ -136,7 +171,12 @@ type TemplateStore = String -> IO (Maybe Template)
 data Template = Template [ParsedPiece]
   deriving Show
 
-data RenderConfig = RenderConfig 
-  { templateStore :: TemplateStore
+type ParserM = GenParser Char StrappedConfig
+
+data BlockParser = forall a . (Block a) => BlockParser (ParserM a)
+
+data StrappedConfig = StrappedConfig
+  { customParsers :: [BlockParser]
+  , templateStore :: TemplateStore
   , escapeFunc :: Text -> Text
   }

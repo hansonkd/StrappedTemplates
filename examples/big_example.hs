@@ -1,19 +1,13 @@
 {-# LANGUAGE BangPatterns #-}
 import Control.Monad.IO.Class
 import qualified Blaze.ByteString.Builder as B
+import qualified Blaze.ByteString.Builder.Char8 as B
 import qualified Data.Text as T
 import Data.Time
 import Data.Typeable
 import qualified Data.ByteString as BS
 import Data.Monoid
 import Text.Strapped
-
-
-data Custom = Custom
-  deriving (Show)
-
-instance Renderable Custom where
-  renderOutput _ c = showToBuilder c
 
 instance Renderable UTCTime where
   renderOutput _ c = showToBuilder c
@@ -23,10 +17,9 @@ instance Renderable NominalDiffTime where
 
 makeBucket :: Integer -> UTCTime -> InputBucket IO
 makeBucket i t = bucketFromList [
-          ("custom", RenderVal Custom),
-          ("whenLoaded", LitVal $ LitDyn t),
-          ("render_size", LitVal $ LitInteger i),
-          ("is", List $ map (LitVal . LitInteger) [1..i]),
+          ("whenLoaded", dyn t),
+          ("render_size", lit i),
+          ("is", lit $ map ( LitInteger) [1..i]),
           ("ioTime", Func (\_ -> (liftIO $ getCurrentTime) >>= (\c -> return $ LitDyn $ c) )),
           ("diffTime", Func diffTime),
           ("addNumbers", Func add)
@@ -43,10 +36,10 @@ makeBucket i t = bucketFromList [
 main :: IO ()
 main = do 
   (return "blah") >>= (\r -> return ["what", r]) >>= print
-  tmpls <- templateStoreFromDirectory "examples/templates" ".strp"
+  tmpls <- templateStoreFromDirectory defaultConfig "examples/templates" ".strp"
   time <- getCurrentTime
   case tmpls of
     Left err -> print err
     Right store -> do
-      rendered <- render (RenderConfig store id) (makeBucket 100 time) "big-complex.strp"
+      rendered <- render (defaultConfig {templateStore = store}) (makeBucket 100 time) "big-complex.strp"
       either (print) (BS.putStr . B.toByteString) rendered

@@ -1,23 +1,24 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, DeriveDataTypeable #-}
 
 import Test.Hspec
 
 import qualified Blaze.ByteString.Builder as B
-import qualified Data.Text.Lazy as T
+import qualified Data.Text as T
 import qualified Data.ByteString as BS
+import Data.Typeable
 import Text.Strapped
 import System.Exit
 
 data Custom = Custom
-  deriving (Show)
+  deriving (Show, Typeable)
 
 instance Renderable Custom where
   renderOutput _ c = showToBuilder c
 
 mainBucket :: InputBucket IO
 mainBucket = bucketFromList [
-          ("custom", RenderVal Custom),
-          ("is", List $ map (LitVal . LitInteger) [1..3]),
+          ("custom", LitVal $ LitDyn Custom),
+          ("is", lit $ map (LitInteger) [1..3]),
           ("addNumbers", Func add)
         ]
   where add (LitList ((LitInteger a):(LitInteger b):[])) = return $ LitInteger $ a + b
@@ -27,15 +28,11 @@ mainBucket = bucketFromList [
 renderShouldBe :: IO (Either StrapError Output) -> Either StrapError BS.ByteString -> Expectation
 renderShouldBe f c = f >>= (\e -> (fmap B.toByteString e) `shouldBe` c)
 
-spec :: RenderConfig -> Spec
+spec :: StrappedConfig -> Spec
 spec ts = do
     describe "for loop" $
       it "Should loop through stuff" $ do
         (render ts mainBucket "for_loop") `renderShouldBe` (Right "1, 2, 3, ")
-
-    describe "RenderVal" $
-      it "class RenderVal" $ do
-        (render ts mainBucket "custom") `renderShouldBe` (Right "Custom")
 
     describe "Comment" $
       it "Check comments" $ do
@@ -66,7 +63,7 @@ spec ts = do
         (render ts mainBucket "if") `renderShouldBe` (Right "show me")
 
 main = do
-    let ets = templateStoreFromList 
+    let ets = templateStoreFromList defaultConfig
             [ ("for_loop", "{$ for i in is $}${ i }, {$ endfor $}")
             , ("custom", "${ custom }")
             , ("comment", "{$ comment $}${ custom }{$ endcomment $}")
