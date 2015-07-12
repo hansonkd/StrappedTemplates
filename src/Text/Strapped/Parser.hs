@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleContexts #-}
+
 module Text.Strapped.Parser
   ( parseTemplate
   -- * Building custom template parsers
@@ -188,9 +190,9 @@ parseStringContents ::  Char -> ParserM String
 parseStringContents esc = between (char esc) (char esc) (many chars)
     where chars = (try escaped) <|> noneOf [esc]
           escaped = char '\\' >> choice (zipWith escapedChar codes replacements)
-          escapedChar code replacement = char code >> return replacement
           codes        = ['b',  'n',  'f',  'r',  't',  '\\', '\"', '\'', '/']
           replacements = ['\b', '\n', '\f', '\r', '\t', '\\', '\"', '\'', '/']
+          escapedChar code replacement = char code >> return replacement
 
 parseStatic :: ParserM Piece
 parseStatic = do
