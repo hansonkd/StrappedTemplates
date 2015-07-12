@@ -1,9 +1,0 @@
-language: haskell
-ghc: 7.8
-install:
-  - cabal install StrappedTemplates.cabal --enable-tests
-script:
-  - cabal configure -v0 --enable-tests && cabal build -v0 && cabal test
-  - ghc -c examples/base_example.hs
-  - ghc -c examples/big_example.hs
-  - ghc -c examples/make_readme.hs
